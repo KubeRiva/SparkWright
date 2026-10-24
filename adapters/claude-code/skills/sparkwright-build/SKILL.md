@@ -5,6 +5,11 @@ description: Build one approved SparkWright task end to end — tests first by a
 
 # Build a task
 
+For several tasks, first run `sparkwright build <id> <id> ... --plan --json`.
+Tasks in the same batch cannot touch the same files: you may drive their
+build loops side by side (each in its own fresh agents). Start the next batch
+only after the user has merged the previous one.
+
 You are the orchestrator. You never write tests or code yourself: each agent
 step runs in a fresh agent so no role grades its own work.
 

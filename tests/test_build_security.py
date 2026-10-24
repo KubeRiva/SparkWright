@@ -206,7 +206,10 @@ class TestMedium(unittest.TestCase):
             run_cli(r, "approve", "CR1", "--as", "Srikanth")
             run_cli(r, "change", "apply", "CR1")
             commit(r, "cr")
-            run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth", "--cr", "CR1")
+            from test_phase5 import host_review
+            host_review(r, "C1")  # S3.10: the CR target is reviewed before re-approval
+            code, out = run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 0, out)
             commit(r, "reapprove")
             for n in range(1, 4):
                 b = Build(r, "C1.1.1.T1", restart=True)

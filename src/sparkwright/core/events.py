@@ -9,7 +9,13 @@ from . import ids
 from .approvals import now
 
 EVENTS_PATH = "specs/events.jsonl"
-EVENT_KINDS = {"changed", "building", "blocked", "done", "cr-applied"}
+EVENT_KINDS = {"changed", "building", "blocked", "done", "cr-applied", "reviewed"}
+
+
+def reviewed_since(events: list["Event"], rid: str, text_hash: str, since: str | None) -> bool:
+    """True when a non-failing review saw exactly this text at or after `since` (S3.10)."""
+    return any(e.id == rid and e.event == "reviewed" and (since is None or e.time >= since)
+               and (e.reason or "").split(" ")[-1] == text_hash for e in events)
 
 
 @dataclass

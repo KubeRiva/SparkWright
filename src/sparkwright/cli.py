@@ -189,16 +189,28 @@ def cmd_approve(args) -> int:
         return _emit(args, "approve", False, {"error": f"{args.cr} is not an approved change request"},
                      f"Refusing: {args.cr} is not an approved change request in specs/changes/.")
     derived = {k: n.status for k, n in checks.run(root, write_ledger=False).nodes.items()}
-    blocked = []
+    from .core import events as events_mod
+    evs, _ = events_mod.read(root)
+    blocked, unreviewed = [], []
     for r in reqs:
         prev = latest.get(r.id)
         risk = approvals.risk_of(repo, r.id)
-        if prev and prev.hash == r.hash and derived.get(r.id) != "changed" and approvals.risk_matches(prev, repo, r.id):
+        changed_like = derived.get(r.id) in ("changed", "in-review")
+        if prev and prev.hash == r.hash and not changed_like and approvals.risk_matches(prev, repo, r.id):
             continue  # already approved as-is
-        if prev and (prev.hash != r.hash or derived.get(r.id) == "changed") and not args.cr:
+        if prev and (prev.hash != r.hash or changed_like) and not args.cr:
             blocked.append(r.id)
             continue
+        if args.cr:  # S3.10: the CR's target must pass a review of its new text before re-approval
+            applied = [e.time for e in evs if e.id == r.id and e.event == "cr-applied" and (e.reason or "") == args.cr]
+            if applied and not events_mod.reviewed_since(evs, r.id, r.hash, max(applied)):
+                unreviewed.append(r.id)
+                continue
         entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk))
+    if unreviewed:
+        return _emit(args, "approve", False, {"needs_review": unreviewed},
+                     "Refusing: review the changed text first (S3.10): "
+                     + ", ".join(f"`sparkwright review {repo.file_of[i].id or i}`" for i in unreviewed))
     if blocked:
         return _emit(args, "approve", False, {"needs_change_request": blocked},
                      "Refusing: these approved requirements changed and need a change request (--cr CR<n>): "
@@ -431,12 +443,49 @@ def cmd_adapt(args) -> int:
                  f"Updated {path.relative_to(root)} (human-gated: review and commit it yourself).")
 
 
+def _build_many(args, root: Path) -> int:
+    """S3.8: plan non-overlapping batches; in Runner mode build each batch's tasks concurrently."""
+    from concurrent.futures import ThreadPoolExecutor
+    from .runner import parallel
+    from .runner.build import Build, BuildError
+    try:
+        batches = parallel.plan_batches(root, args.id)
+    except ValueError as exc:
+        return _emit(args, "build", False, {"error": str(exc)}, f"Error: {exc}")
+    if args.plan or args.next or args.done:
+        text = "\n".join(f"Batch {i}: {', '.join(b)}" for i, b in enumerate(batches, 1))
+        text += "\nTasks in one batch may build at the same time; start a batch after the previous one is merged."
+        return _emit(args, "build", True, {"batches": batches}, text)
+    router = _router(args, root)
+
+    def one(task: str) -> dict:
+        try:
+            return Build(root, task, restart=args.restart).run(router)
+        except (BuildError, ProviderError, RoleFailed) as exc:
+            return {"task": task, "step": "error", "reason": str(exc)}
+
+    first = batches[0]  # later batches overlap these files: they start after a human merges this batch
+    with ThreadPoolExecutor(max_workers=max(1, min(args.parallel or 1, len(first)))) as pool:
+        results = list(pool.map(one, first))
+    ok = all(r["step"] == "ready" for r in results)
+    text = "\n".join(f"{r['task']}: {r['step']} {r.get('reason', '')}".rstrip() for r in results)
+    if len(batches) > 1:
+        text += "\nNot started (their files may overlap this batch; merge first): " + \
+                "; ".join(", ".join(b) for b in batches[1:])
+    return _emit(args, "build", ok, {"batches": batches, "results": results}, text)
+
+
 def cmd_build(args) -> int:
     from .runner.build import Build, BuildError
     root = Path(args.root).resolve()
+    if len(args.id) > 1 or args.plan:
+        return _build_many(args, root)
+    args.id = args.id[0]
     try:
         b = Build(root, args.id, restart=args.restart)
-        if args.done:
+        if args.abandon:
+            ins = b.abandon()
+        elif args.done:
             src = args.result
             if not src:
                 raise BuildError("--done needs --result <file> (the agent's reply), or '-' for stdin")
@@ -524,7 +573,8 @@ def cmd_change(args) -> int:
     events_mod.append(root, [events_mod.make(target, "cr-applied", reason=cr)])
     _set_status(root / sf.path, "applied")
     return _emit(args, "change", True, {"affected": sorted(affected, key=ids.sort_key), "marked_changed": changed},
-                 f"Applied {cr}. Marked changed: {', '.join(changed) or 'none'}. Edit {target}, review it, re-approve with "
+                 f"Applied {cr}. {target} is now in review; marked changed: {', '.join(changed) or 'none'}.\n"
+                 f"Next: edit {target}, run `sparkwright review {repo.file_of[target].id or target}`, then "
                  f"`sparkwright approve {target} --as <name> --cr {cr}`, then rebuild affected tasks.")
 
 # ---------------------------------------------------------------- main
@@ -590,11 +640,14 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--marketplace", action="store_true", help="also write .claude-plugin/marketplace.json at the repo root")
     sp.set_defaults(func=cmd_adapt)
     sp = common(sub.add_parser("build", help="build a task: tests first, code, checks, mutation, review"))
-    sp.add_argument("id", help="task ID, e.g. C1.2.1.T1")
+    sp.add_argument("id", nargs="+", help="task ID, e.g. C1.2.1.T1 (several: plan or build in parallel, S3.8)")
+    sp.add_argument("--plan", action="store_true", help="group tasks into batches whose files cannot overlap")
+    sp.add_argument("--parallel", type=int, default=2, metavar="N", help="Runner mode: build up to N tasks of a batch at once")
     sp.add_argument("--next", action="store_true", help="host mode: run automatic steps and print the next agent step")
     sp.add_argument("--done", metavar="STEP", help="host mode: record the result of an agent step")
     sp.add_argument("--result", metavar="FILE", help="file holding the agent's reply ('-' for stdin)")
     sp.add_argument("--restart", action="store_true", help="start a new run after a blocked build")
+    sp.add_argument("--abandon", action="store_true", help="stop an in-progress build (keeps its branch)")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_build)
     common(sub.add_parser("verify", help="run the project's checks from config")).set_defaults(func=cmd_verify)

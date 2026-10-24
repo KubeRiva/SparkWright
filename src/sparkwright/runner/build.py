@@ -27,7 +27,7 @@ from pathlib import Path, PurePosixPath
 
 from ..core import approvals as approvals_mod, checks, config as config_mod, events as events_mod, ids, store
 from ..core.approvals import Approval
-from . import libcheck, mutate
+from . import libcheck, mutate, parallel
 from .personas import load_all
 from .review import Finding, parse_findings
 from .runlog import RunLog
@@ -429,8 +429,18 @@ class Build:
             st = self.state
             if st.phase in AGENT_STEPS or st.phase in TERMINAL:
                 return self.instruction()
-            getattr(self, "_step_" + st.phase.replace("-", "_"))()
+            if st.phase in ("prepare", "finish"):
+                with parallel.MAIN_REPO_LOCK:  # both touch the main repository's git state
+                    getattr(self, "_step_" + st.phase.replace("-", "_"))()
+            else:
+                getattr(self, "_step_" + st.phase.replace("-", "_"))()
         raise BuildError("build did not settle after 60 automatic steps")
+
+    def abandon(self) -> dict:
+        """A human stops this build; its branch is kept for inspection."""
+        if self.state.phase in ("blocked", "changed") or self.state.phase == "prepare":
+            return self.instruction()
+        return self._block("abandoned by a human")
 
     def submit(self, step: str, output: str) -> dict:
         st = self.state
@@ -505,6 +515,14 @@ class Build:
         if status not in ("approved", "building") and not (self.restart and status == "blocked"):
             raise BuildError(f"task {self.task} is '{status}'; it must be approved before it is built "
                              f"(`sparkwright approve {self.task} --as <name>`)")
+        for other in parallel.active_builds(self.root):  # S3.8: no two builds may touch the same files
+            if other["task"] == self.task:
+                continue
+            ofiles = list((self.repo.requirements.get(other["task"]) or self.req).extras.get("files") or [])
+            if parallel.globs_may_intersect(self.files, ofiles):
+                raise BuildError(f"task {other['task']} is building on {other['branch']} and its files {ofiles} may overlap "
+                                 f"{self.files}; merge it first, or stop it with "
+                                 f"`sparkwright build {other['task']} --abandon` (S3.8)")
         self._count_change_request_round()
         if self.state.phase == "blocked":
             return
@@ -760,6 +778,15 @@ class Build:
     def _step_finish(self) -> None:
         st, ws = self.state, Path(self.state.workspace)
         problems = []
+        mine = parallel.changed_files(ws, st.base, "HEAD")
+        for other in parallel.active_builds(self.root):  # S3.8: compare what was actually changed
+            if other["task"] != self.task:
+                both = mine & parallel.changed_files(self.root, other["base"], other["branch"])
+                if both:
+                    problems.append(f"build of {other['task']} also changed {sorted(both)}")
+        main_moved = mine & parallel.changed_files(self.root, st.base, "HEAD")
+        if main_moved:
+            problems.append(f"the main branch changed {sorted(main_moved)} since this build started; restart the build")
         if _changed(ws):
             problems.append("workspace has uncommitted changes")
         commits = self._role_commits()

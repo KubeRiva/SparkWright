@@ -26,7 +26,8 @@ def derive(repo: Repo, latest_approvals: dict[str, Approval], events: list[Event
         evs = [e for _, _, e in timeline.get(rid, [])]
         last_changed = max((e.time for e in evs if e.event == "changed"), default=None)
         if last_changed and not (approved_now and appr.time >= last_changed):
-            out[rid] = "changed"
+            applied = any(e.event == "cr-applied" and e.time >= last_changed for e in evs)
+            out[rid] = "in-review" if applied else "changed"  # S3.10: an applied CR puts its target back in review
             continue
         build = [e for e in evs if e.event in BUILD_EVENTS and (last_changed is None or e.time >= last_changed)]
         if build:

@@ -319,9 +319,19 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
                           gate, log.total_cost(), log.run_id)
     if write:
         result.path = write_review(root, result)
+        _record_reviewed(root, sf, result)
     log.append("foreman", status="done", findings=len(findings), gate=gate,
                review=str(result.path.relative_to(root)) if result.path else None)
     return result
+
+
+def _record_reviewed(root: Path, sf: store.SpecFile, result: "ReviewResult") -> None:
+    """S3.10: a review that did not fail records which text it saw, so a change request's re-approval can require it."""
+    if result.gate.startswith("FAIL"):
+        return
+    from ..core import events as events_mod
+    events_mod.append(root, [events_mod.make(r.id, "reviewed", run=result.run_id, reason=f"{result.review_id} {r.hash}")
+                             for r in sf.requirements])
 
 
 # ------------------------------------------------------------------ host-agent path (S8.1, S8.2)
@@ -420,6 +430,7 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
     result = ReviewResult(_next_review_id(root), None, target, level, findings, ran, [], abstained, gate, 0.0, run_id)
     if write:
         result.path = write_review(root, result)
+        _record_reviewed(root, sf, result)
     log.append("foreman", status="done", findings=len(findings), gate=gate,
                review=str(result.path.relative_to(root)) if result.path else None)
     return result
