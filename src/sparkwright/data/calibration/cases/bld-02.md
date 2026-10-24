@@ -3,15 +3,15 @@ id: bld-02
 expect:
 - buildability-checker
 ids:
-- C1.1.1
+- C2.1.1
 keywords:
 - invalid
 - error
 - malformed
 - edge
 - not specified
-- C1.1.1
-flaw: C1.1.1 never says what happens with an invalid date string.
+- C2.1.1
+flaw: C2.1.1 never says what happens with an invalid date string.
 ---
 === ARTIFACT (specs/components/C2-dates.md) ===
 ## Requirements

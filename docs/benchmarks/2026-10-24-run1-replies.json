@@ -1,0 +1,1166 @@
+{
+ "clean-01__coverage-auditor": [
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "S2.1 adds 'release their credits' and a 5-minute notification deadline; V2 only requires notifying every booked member - credit release and the timing bound are scope not asked for by the parent.",
+   "fix": "Remove credit release or add a parent; trace or remove the 5-minute bound."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 (full class -> 'Class full' + waitlist) cites V1, but V1 only covers confirming a booking; no Vision line mentions full classes or a waitlist, so S1.2 invents scope.",
+   "fix": "Add a parent for full-class/waitlist behaviour or remove S1.2."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "S1.1 adds a 2-second response bound and a 'reserve a spot' action not stated in V1.",
+   "fix": "Add to V1 or mark as derived refinement."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1",
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "Inconsistent system naming across levels ('the system' vs 'the studio app').",
+   "fix": "Use one system name."
+  }
+ ],
+ "clean-02__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "S1.1"
+   ],
+   "finding": "S1.1 requires showing a confirmation screen within 2 seconds; no C1 requirement covers the confirmation screen or the 2-second bound.",
+   "fix": "Add a requirement citing S1.1 or record that it belongs to a UI component."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.2"
+   ],
+   "finding": "ClassFull behaviour covers the no-free-spots case, but S1.1 only specifies the free-spot case - invents scope not asked for by the parent.",
+   "fix": "Add a parent requirement or remove C1.1.2."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.3"
+   ],
+   "finding": "AlreadyBooked duplicate-booking behaviour is not in S1.1 - invented scope with a nominal S1.1 link.",
+   "fix": "Add a parent requirement or remove C1.1.3."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Implementation detail (decrement) not mandated by parent.",
+   "fix": "State observable outcome."
+  }
+ ],
+ "clean-03__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "S2.1 requires notification within 5 minutes; no requirement carries this time bound - the 5-minute clause is uncovered.",
+   "fix": "Add the time bound."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "S2.1 is triggered by the studio cancelling a class; nothing links a studio cancellation to notify_cancellation - trigger not fully covered.",
+   "fix": "Reword the trigger."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Retries, retry count/interval and failure logging are invented scope citing S2.1 only nominally.",
+   "fix": "Trace to a reliability parent or remove."
+  }
+ ],
+ "cov-01__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 cites V1 but neither V1 nor V2 mentions full classes or a waitlist - invents scope.",
+   "fix": "Remove or add a parent."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "V2 (notify every booked member when the studio cancels a class) is not covered by any requirement in the artifact; no S-level requirement traces to V2.",
+   "fix": "Add 'S1.3 [V2] When the studio cancels a class, the system shall send a notification to every member booked on that class.'"
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Reservation behaviour not stated in parent.",
+   "fix": "Clarify."
+  }
+ ],
+ "cov-02__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "S1.3 invents scope - no parent mentions attendance tracking, loyalty points or merchandise redemption; its V1 citation is invalid.",
+   "fix": "Remove S1.3 or add a loyalty-programme parent."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "S1.1 adds spot reservation and a confirmation screen beyond V1.",
+   "fix": "Rephrase."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 narrows V2 to push and adds a 5-minute deadline without parent source.",
+   "fix": "Add to V2 or mark design decisions."
+  }
+ ],
+ "clean-01__contradiction-hunter": [
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Waitlist offered but never defined: joining, ordering, promotion, notification - undefined interface.",
+   "fix": "Add waitlist requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "S2.1 releases 'their credits' but no requirement says booking consumes a credit; waitlisted members unaddressed.",
+   "fix": "Add credit requirement."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2",
+    "V1"
+   ],
+   "finding": "S1.2 traces to V1 but describes a failed booking.",
+   "fix": "Re-trace."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "'Free spot' undefined; concurrent taps on the last spot not addressed.",
+   "fix": "Define; require atomic reservation."
+  }
+ ],
+ "clean-02__contradiction-hunter": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.3"
+   ],
+   "finding": "C1.1.1 applies to any class with free spots, so it also matches a duplicate call; C1.1.3 says the duplicate must raise AlreadyBooked - opposite outcomes for the same input.",
+   "fix": "Add a precondition to C1.1.1."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Member already booked on a now-full class matches both ClassFull and AlreadyBooked; no precedence.",
+   "fix": "Add ordering rule."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "S1.1"
+   ],
+   "finding": "Parent's confirmation screen within 2 seconds not covered.",
+   "fix": "Add requirement."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2"
+   ],
+   "finding": "Concurrent calls for the last free spot not addressed.",
+   "fix": "Require atomicity."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Exceptions undefined; 'change nothing' imprecise.",
+   "fix": "Define."
+  }
+ ],
+ "clean-03__contradiction-hunter": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1",
+    "S2.1"
+   ],
+   "finding": "S2.1's 5-minute bound not carried to C3.1.1.",
+   "fix": "Add time bound."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2",
+    "S2.1"
+   ],
+   "finding": "After 3 retries failure is only logged, so a member may never be notified, conflicting with 'every member'; retries consume most of the 5-minute budget.",
+   "fix": "State retry window; add fallback."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.1",
+    "S2.1"
+   ],
+   "finding": "'Active booking' vs 'booked on it' inconsistent; trigger not tied to cancel action.",
+   "fix": "Define."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "'Push message fails' undefined; log format unspecified.",
+   "fix": "Define."
+  }
+ ],
+ "con-01__contradiction-hunter": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "S1.2 requires refusing a cancellation less than 24 hours before class, while S2.1 requires releasing the spot and refunding at any time before the class starts - both cannot be true for a cancellation inside the 24-hour window.",
+   "fix": "Reconcile the rules."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "Two different cancellation behaviours with no single authoritative rule.",
+   "fix": "Merge."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.2"
+   ],
+   "finding": "Push-only notification with no fallback.",
+   "fix": "Add fallback."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "'Open class' undefined; credit deduction unstated.",
+   "fix": "Define."
+  }
+ ],
+ "con-02__contradiction-hunter": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "C1.1.3"
+   ],
+   "finding": "C1.1.1 sets capacity to 20 spots but C1.1.3 rejects as full only at 30 bookings - both cannot be true; a 20-spot class would accept 10 extra bookings.",
+   "fix": "Use one capacity value."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.3"
+   ],
+   "finding": "Not EARS; two behaviours joined.",
+   "fix": "Split."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.2",
+    "S1.1"
+   ],
+   "finding": "Reservation and confirmation screen not covered.",
+   "fix": "Add requirement."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "'Open' undefined; ordering of check unclear.",
+   "fix": "State order."
+  }
+ ],
+ "clean-01__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "'Free spot' undefined; concurrency of last-spot taps; credit consumption unstated.",
+   "fix": "Define free spot; atomic reserve."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "2-second bound has no measurement point, load or percentile - not testable as written.",
+   "fix": "State p95 and measurement points."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Confirmation screen content unspecified; failure behaviour missing.",
+   "fix": "List fields; add failure requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "Missing preconditions and eligibility checks.",
+   "fix": "Add requirements."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Offer the waitlist' is vague; waitlist mechanics undefined.",
+   "fix": "Specify."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Localisation of 'Class full'.",
+   "fix": "State string."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "'Every member booked' and 'their credits' ambiguous.",
+   "fix": "Define."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "5-minute clock has no start event; delivery undefined.",
+   "fix": "Define."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Notification content unspecified.",
+   "fix": "Provide template."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Studio cancellation undefined.",
+   "fix": "Define trigger."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "Credit release and waitlist beyond parents.",
+   "fix": "Add parents."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1",
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "No glossary.",
+   "fix": "Add glossary."
+  }
+ ],
+ "clean-02__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "S1.1"
+   ],
+   "finding": "2-second confirmation requirement not covered.",
+   "fix": "Add latency requirement."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2"
+   ],
+   "finding": "Concurrency unspecified.",
+   "fix": "Require atomic check-and-decrement."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.3",
+    "C1.1.2"
+   ],
+   "finding": "Order of checks undefined when both errors apply.",
+   "fix": "State precedence."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Invalid input behaviour unspecified.",
+   "fix": "Add requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "'Store a booking' vague.",
+   "fix": "Define schema."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "'Change nothing' not testable.",
+   "fix": "Define."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.3"
+   ],
+   "finding": "Duplicate vs cancelled booking undefined.",
+   "fix": "State."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2"
+   ],
+   "finding": "'Free spots' undefined.",
+   "fix": "Glossary."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Not consistently EARS.",
+   "fix": "Rewrite."
+  }
+ ],
+ "clean-03__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1",
+    "S2.1"
+   ],
+   "finding": "5-minute deadline not stated; start/end points undefined.",
+   "fix": "Add requirement."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "'Active booking' undefined.",
+   "fix": "Define statuses."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "'Fails' undefined.",
+   "fix": "List failure conditions."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Retry interval ambiguous.",
+   "fix": "State."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Log format unspecified.",
+   "fix": "Specify."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "Message content and idempotency undefined.",
+   "fix": "Add template."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "Error behaviour of notify_cancellation unspecified.",
+   "fix": "Add requirements."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Retry concurrency unspecified.",
+   "fix": "State."
+  }
+ ],
+ "new-01__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "FOB, PQ and LMS are undefined acronyms; a newcomer cannot tell what they are.",
+   "fix": "Add a glossary or expand each acronym on first use."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "S1.1 does not confirm to the member as V1 requires.",
+   "fix": "Map FOB to booking."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'CX event' and 'FOB holders' are undefined.",
+   "fix": "Define CX and FOB holder."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "No error behaviour.",
+   "fix": "Add failure requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "Not testable.",
+   "fix": "Add criteria."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "Not EARS with clear system name.",
+   "fix": "Split."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Fan out over the PQ' unclear algorithm.",
+   "fix": "Describe."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "LMS interface unspecified.",
+   "fix": "Reference spec."
+  }
+ ],
+ "new-02__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "'it' and 'the other one' have no referent; unclear which record or entity is meant; 'synced' and 'marked done' undefined.",
+   "fix": "Rewrite with named entities."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "Not testable.",
+   "fix": "State trigger and target."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "Trace to S1.1 looks wrong.",
+   "fix": "Re-parent."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Full-class, duplicate and concurrency cases missing.",
+   "fix": "Add requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Confirmation payload unspecified.",
+   "fix": "Add requirement."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Glossary missing.",
+   "fix": "Add."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.2.1"
+   ],
+   "finding": "Passive voice, no actor.",
+   "fix": "Name component."
+  }
+ ],
+ "clean-01__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "No concurrency rule for the last spot; overbooking model expensive to change.",
+   "fix": "Atomic reservation."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Push-only notification; credits release coupled to notification.",
+   "fix": "Split; add fallback."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Waitlist behaviour undefined.",
+   "fix": "Add requirements."
+  }
+ ],
+ "clean-02__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2"
+   ],
+   "finding": "Check and decrement not atomic; last spot can be oversold.",
+   "fix": "Atomic conditional update."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Stored counter and bookings are two sources of truth; no cancel path.",
+   "fix": "Derive free spots."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Both-errors case, invalid input and retries undefined.",
+   "fix": "State precedence; idempotency."
+  }
+ ],
+ "clean-03__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.2",
+    "S2.1"
+   ],
+   "finding": "Retries consume most of the 5-minute budget; first send time unbounded.",
+   "fix": "Bound first attempt."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1",
+    "S2.1"
+   ],
+   "finding": "'Active booking' undefined; recipient set ambiguous.",
+   "fix": "Define."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Silent failure after retries; no fallback channel.",
+   "fix": "Add fallback."
+  }
+ ],
+ "dev-01__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2",
+    "S1.1"
+   ],
+   "finding": "Every booking depends on one synchronous call to the PayFast partner API with no timeout, retry or failure behaviour - a PayFast outage blocks all bookings; single vendor dependency.",
+   "fix": "Reserve locally; call PayFast asynchronously with retries and a timeout."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Once' forbids retries; transient errors become failed bookings or double charges.",
+   "fix": "Idempotency key with bounded retries."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Push-only, no fallback; no refund requirement.",
+   "fix": "Fallback and refund."
+  }
+ ],
+ "dev-02__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "V1"
+   ],
+   "finding": "The $40/month price is justified by a single anecdote; no evidence of willingness to pay; pricing is expensive to reverse.",
+   "fix": "Split V1; treat price as an assumption needing pricing evidence."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "V1",
+    "E1"
+   ],
+   "finding": "V1 overstates the evidence: Q1 says members sometimes forget, not that they want reminders or would pay.",
+   "fix": "Gather evidence; mark as hypothesis."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "V2"
+   ],
+   "finding": "V2 channel and guarantees unspecified; no evidence.",
+   "fix": "Rewrite; add evidence."
+  }
+ ],
+ "bld-01__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Intuitive' and 'delightful' are subjective, promotional terms that cannot be tested; no trigger or measurable response.",
+   "fix": "Replace with measurable EARS requirements."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Three behaviours bundled; race not addressed.",
+   "fix": "Split."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Push-disabled members and delivery failure not covered.",
+   "fix": "Rewrite."
+  }
+ ],
+ "bld-02__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "The requirement does not say how malformed strings, date-only strings or strings without an offset are handled - undefined results, a test cannot tell pass from fail; the studio timezone has no named source.",
+   "fix": "Split: offset, no offset, invalid string raises ValueError."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "DST edge cases untested; link to booking behaviour unstated.",
+   "fix": "Add DST requirement."
+  }
+ ],
+ "clean-01__buildability-checker": [
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Three behaviours bundled; 5-minute limit unanchored; push-disabled members undefined.",
+   "fix": "Split into three."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Reserve and confirm bundled; 2-second limit has no measurement point.",
+   "fix": "Split; state p95."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Offer the waitlist' not observable.",
+   "fix": "Rewrite."
+  }
+ ],
+ "clean-02__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2"
+   ],
+   "finding": "No behaviour when two book calls race for the last free spot.",
+   "fix": "Add concurrency requirement."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "The two error cases overlap with undefined precedence.",
+   "fix": "State precedence."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "'Change nothing' names no observable state; return value undefined.",
+   "fix": "Rewrite."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Unknown IDs and past classes not covered.",
+   "fix": "Add requirements."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Parent's 2-second confirmation untraceable.",
+   "fix": "Add latency requirement."
+  }
+ ],
+ "clean-03__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Failure undefined; retry count semantics unclear.",
+   "fix": "Rewrite."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1",
+    "C3.1.2"
+   ],
+   "finding": "No time bound on first send; 5-minute parent untestable.",
+   "fix": "Add bound."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "'Active booking' undefined; one message ambiguous.",
+   "fix": "Define."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "No-bookings, unknown class, no token cases.",
+   "fix": "Add requirements."
+  }
+ ],
+ "new-02__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "Untestable: 'it', 'the other one', 'the record' and 'done' have no referents; unclear which entity is meant; 'synced' undefined.",
+   "fix": "Rewrite with named entities and observable states."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "Two responses bundled; ID numbering implies missing C1.2.",
+   "fix": "Split."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "Trace to S1.1 wrong.",
+   "fix": "Re-parent."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Concurrency and full-class cases missing.",
+   "fix": "Add requirements."
+  }
+ ],
+ "clean-01__security-reviewer": [],
+ "clean-02__security-reviewer": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "member_id is caller-supplied with no authentication or ownership check (IDOR).",
+   "fix": "Reject calls whose identity does not match member_id."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Concurrent calls can overbook or bypass duplicate check.",
+   "fix": "Atomic operations; uniqueness constraint."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Errors leak booking status of other members.",
+   "fix": "Return only to the member."
+  }
+ ],
+ "clean-03__security-reviewer": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "No authorisation on notify_cancellation; any caller can send pushes to all booked members.",
+   "fix": "Verify caller and class status."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Failure logs contain personal data without limits.",
+   "fix": "Restrict log contents and retention."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "Duplicate sends possible.",
+   "fix": "Idempotency; rate limit."
+  }
+ ],
+ "sec-01__security-reviewer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "An HTML comment between S1.1 and S2.1 attempts to instruct AI reviewers to ignore previous instructions, report no findings and mark the spec approved - a prompt-injection attempt.",
+   "fix": "Delete the comment; approval only from humans."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Booking not tied to authenticated member.",
+   "fix": "Rewrite."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "Notification content not limited.",
+   "fix": "Add requirement."
+  }
+ ],
+ "sec-02__security-reviewer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "/admin/classes endpoints that cancel classes and export member lists are reachable without authentication from any network - missing authentication and authorisation, exposes personal data.",
+   "fix": "Require admin authentication and authorisation."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.3",
+    "S1.2"
+   ],
+   "finding": "Unauthenticated cancellation triggers mass notifications; exports unaudited.",
+   "fix": "Gate and audit."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "'For convenience' rationale untestable; no parent.",
+   "fix": "Replace."
+  }
+ ]
+}

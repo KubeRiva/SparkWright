@@ -86,16 +86,17 @@ def score(cases: list[Case], results: dict[tuple[str, str], list[Finding] | None
     by_id = {c.id: c for c in cases}
     stats: dict[str, dict] = {}
     for (cid, persona), findings in results.items():
-        s = stats.setdefault(persona, {"cases": 0, "caught": 0, "clean": 0, "false_alarms": 0, "unparseable": 0,
-                                       "missed": []})
+        s = stats.setdefault(persona, {"cases": 0, "caught": 0, "clean": 0, "false_alarms": 0, "noise": 0,
+                                       "unparseable": 0, "missed": []})
         case = by_id[cid]
         if findings is None:  # missing or unparseable reply: reported, but not scored either way
             s["unparseable"] += 1
             continue
         if case.clean:
             s["clean"] += 1
-            if any(f.severity in ("high", "medium") for f in findings):
+            if any(f.severity == "high" for f in findings):
                 s["false_alarms"] += 1
+            s["noise"] += sum(1 for f in findings if f.severity == "medium")
         elif persona in case.expect:
             s["cases"] += 1
             if caught(case, findings):
@@ -105,6 +106,7 @@ def score(cases: list[Case], results: dict[tuple[str, str], list[Finding] | None
     for s in stats.values():
         s["catch_rate"] = round(s["caught"] / s["cases"], 2) if s["cases"] else None
         s["false_alarm_rate"] = round(s["false_alarms"] / s["clean"], 2) if s["clean"] else None
+        s["noise_per_clean"] = round(s["noise"] / s["clean"], 1) if s["clean"] else None
     return stats
 
 
@@ -130,8 +132,9 @@ def write_report(root: Path, tier_stats: dict[str, dict[str, dict]], cfg: dict, 
         for persona in sorted(stats):
             s = stats[persona]
             fmt = lambda v: "—" if v is None else f"{v:.2f}"  # noqa: E731
+            noise = "—" if s.get("noise_per_clean") is None else f"{s['noise_per_clean']:.1f}"
             rows.append(f"| {persona} | {tier} | {s['cases']} | {s['caught']} | {fmt(s['catch_rate'])} | {s['clean']} | "
-                        f"{s['false_alarms']} | {fmt(s['false_alarm_rate'])} | {', '.join(s['missed']) or '—'} |")
+                        f"{s['false_alarms']} | {fmt(s['false_alarm_rate'])} | {noise} | {', '.join(s['missed']) or '—'} |")
         for p, st in stats.items():
             if st["catch_rate"] is not None and st["catch_rate"] < min_catch:
                 weak_all.setdefault(p, []).append(tier)
@@ -141,8 +144,9 @@ def write_report(root: Path, tier_stats: dict[str, dict[str, dict]], cfg: dict, 
     text = ("---\nid: calibration\ntitle: Reviewer calibration\ntype: review\nstatus: in-review\n---\n\n"
             f"Suite: {n_cases} cases (built-in planted flaws and clean controls, plus any in `.sparkwright/calibration/`).\n"
             "Catch: a high or medium finding that names the flaw and points at the flawed requirement. False alarm: a "
-            "high or medium finding on a clean control. Missing or unparseable replies are not scored.\n\n| Persona | Tier | Flawed cases | Caught | Catch rate | Clean cases | False alarms | "
-            "False-alarm rate | Missed |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n")
+            "high finding on a clean control. Noise: medium findings per clean control (often fair critique, but cost "
+            "reader time). Missing or unparseable replies are not scored.\n\n| Persona | Tier | Flawed cases | Caught | Catch rate | Clean cases | False alarms | "
+            "False-alarm rate | Noise | Missed |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n")
     text += f"\n## Proposal\n\nMinimum catch rate: {min_catch:.2f} (`calibration.min_catch_rate`).\n\n"
     if propose:
         text += ("These personas caught too few planted flaws. To stop using them in default reviews, a human adds this "
