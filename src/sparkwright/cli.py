@@ -332,9 +332,31 @@ def cmd_review(args) -> int:
     return _emit(args, "review", ok, data, "\n".join(lines))
 
 
+def _guide(args, root: Path) -> int:
+    from .runner import guide as gd
+    minors = True if args.minors else None
+    try:
+        if args.file:
+            data = gd.advance(root, args.file)
+        elif args.prepare:
+            data = gd.prepare(root, args.about or "", minors)
+        else:
+            data = gd.run(root, args.about or "", _router(args, root), minors)
+    except (gd.GuideError, ProviderError, RoleFailed, OSError) as exc:
+        return _emit(args, "interview", False, {"error": str(exc)}, f"Stopped: {exc}")
+    if data["step"] != "done":
+        who = "Guide Writer" if data["step"] == gd.WRITER else "Question Auditor"
+        return _emit(args, "interview", True, data, f"Run a fresh {who} agent on {data['prompt']}, save its reply to "
+                                                   f"{data['result_file']}, then run: {data['then']}")
+    return _emit(args, "interview", data["high"] == 0, data,
+                 f"Guide: {data['guide']}\n{data['gate']} ({data['findings']} findings, {data['high']} high).")
+
+
 def cmd_interview(args) -> int:
     from .runner import interview as iv
     root = Path(args.root).resolve()
+    if args.mode == "guide":
+        return _guide(args, root)
     names = [n for n in (args.redact or "").split(",") if n.strip()]
     try:
         if args.mode == "owner" and args.host:
@@ -613,8 +635,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: merge persona outputs and gate")
     sp.set_defaults(func=cmd_review)
     sp = common(sub.add_parser("interview", help="gather evidence: owner interview or transcript ingest"))
-    sp.add_argument("mode", choices=["owner", "ingest", "collect"])
-    sp.add_argument("file", nargs="?", help="transcript file (ingest) or run id (collect)")
+    sp.add_argument("mode", choices=["owner", "ingest", "collect", "guide"])
+    sp.add_argument("file", nargs="?", help="transcript file (ingest) or run id (collect, guide)")
+    sp.add_argument("--about", help="guide: who the target users are and what to learn")
+    sp.add_argument("--minors", action="store_true", help="guide: target users include people under 18")
     sp.add_argument("--host", action="store_true", help="owner: host agent interviews in chat (no API key)")
     sp.add_argument("--prepare", action="store_true", help="ingest: write the Theme Synthesizer prompt for a host agent")
     sp.add_argument("--consent", help="how consent was obtained (required for ingest)")

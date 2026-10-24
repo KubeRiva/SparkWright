@@ -17,6 +17,8 @@
     "./agents/sparkwright-code-reviewer.md",
     "./agents/sparkwright-theme-synthesizer.md",
     "./agents/sparkwright-architect.md",
+    "./agents/sparkwright-guide-writer.md",
+    "./agents/sparkwright-question-auditor.md",
     "./agents/sparkwright-test-author.md",
     "./agents/sparkwright-property-tester.md",
     "./agents/sparkwright-builder.md"

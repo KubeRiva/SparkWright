@@ -162,5 +162,87 @@ class TestParallelBuilds(unittest.TestCase):
             self.assertIn("main branch changed", ins["reason"])
 
 
+GOOD_GUIDE = """## Goal
+Learn how parents help children practise chess (tests A1).
+
+## Who to recruit
+Parents of children who play chess weekly.
+
+## Consent script
+Ask permission to take anonymized notes.
+
+## Warm-up
+1. Tell me about your week.
+
+## Core questions
+1. Tell me about the last time your child got stuck on a chess puzzle.
+   _What happened next?_
+2. Walk me through how practice went last weekend.
+
+## Wrap-up
+Who else should we talk to?
+"""
+BAD_GUIDE = GOOD_GUIDE.replace("2. Walk me through how practice went last weekend.",
+                               "2. Would you use our app if it gave hints? Don't you think hints help?")
+
+
+class TestInterviewGuide(unittest.TestCase):
+    # sparkwright: S7.2
+    def test_host_flow_writes_guide_and_reviews_it(self):
+        from sparkwright.runner import guide
+        with TempRepo() as r:
+            project(r)
+            code, out = run_cli(r, "interview", "guide", "--about", "adult club players improving tactics", "--prepare")
+            self.assertEqual(code, 0, out)
+            d = out["data"]
+            self.assertFalse(d["minors"])
+            self.assertIn("persona: guide-writer", (r / d["prompt"]).read_text())
+            (r / d["result_file"]).write_text(GOOD_GUIDE)
+            code, out = run_cli(r, "interview", "guide", d["run_id"])
+            self.assertEqual(out["data"]["step"], "question-auditor", out)
+            (r / out["data"]["result_file"]).write_text("[]")
+            code, out = run_cli(r, "interview", "guide", d["run_id"])
+            self.assertEqual(code, 0, out)
+            text = (r / out["data"]["guide"]).read_text()
+            self.assertIn("type: guide", text)
+            self.assertIn("Gate: PASS", text)
+            self.assertNotIn("Participants under 18", text)
+            self.assertTrue(checks.run(r).ok)
+            self.assertEqual(guide.lint(GOOD_GUIDE), [])
+
+    def test_leading_questions_fail_the_gate(self):
+        from sparkwright.runner import guide
+        with TempRepo() as r:
+            project(r)
+            prep = guide.prepare(r, "adult club players")
+            guide.advance(r, prep["run_id"], writer_reply=BAD_GUIDE)
+            out = guide.advance(r, prep["run_id"], auditor_reply="[]")
+            self.assertGreaterEqual(out["high"], 1)
+            self.assertTrue(out["gate"].startswith("FAIL"))
+
+    # sparkwright: S7.7
+    def test_minors_get_parental_consent_section(self):
+        from sparkwright.runner import guide
+        with TempRepo() as r:
+            project(r)
+            prep = guide.prepare(r, "kids aged 8-12 learning chess")
+            self.assertTrue(prep["minors"])
+            guide.advance(r, prep["run_id"], writer_reply=GOOD_GUIDE.replace("Parents of children", "Children"))
+            out = guide.advance(r, prep["run_id"], auditor_reply="[]")
+            text = (r / out["guide"]).read_text()
+            self.assertIn("## Participants under 18 (required)", text)
+            self.assertIn("minors: true", text)
+
+    def test_runner_mode(self):
+        from sparkwright.runner import guide
+        with TempRepo() as r:
+            project(r)
+            fake = FakeProvider(script={"guide-writer": [GOOD_GUIDE], "question-auditor": ["[]"]})
+            router = Router({"roles": {}, "budgets": {}, "models": {}}, {"fast": fake, "mid": fake, "top": fake})
+            out = guide.run(r, "adult club players", router)
+            self.assertEqual(out["high"], 0)
+            self.assertEqual([c[0] for c in fake.calls], ["guide-writer", "question-auditor"])
+
+
 if __name__ == "__main__":
     unittest.main()

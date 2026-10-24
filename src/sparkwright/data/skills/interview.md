@@ -2,7 +2,7 @@
 name: sparkwright-interview
 description: Gather evidence for a SparkWright Vision by interviewing the project owner one question at a time in chat, or by turning a user-interview transcript into anonymized evidence. Use when the user wants to start a new product spec or add user evidence.
 cli: sparkwright interview
-personas: [interviewer, theme-synthesizer]
+personas: [interviewer, theme-synthesizer, guide-writer, question-auditor]
 ---
 
 # Gather evidence
@@ -30,3 +30,13 @@ personas: [interviewer, theme-synthesizer]
 Never mark real interviews `--simulated`, and never use simulated evidence to
 back a Vision requirement. After evidence exists, help the owner cite it in
 `specs/vision.md` with the line grammar `- **V<n>** [E<n>] <requirement>`.
+
+## Interview guide for real users
+
+1. Run `sparkwright interview guide --about "<who the users are and what to learn>" --prepare --json`
+   (add `--minors` when any target users are under 18).
+2. {{run_guide_agent}}
+3. Run the command in `data.then` with `--json`. While `data.step` is not `done`,
+   repeat step 2 for the agent it names, then run `data.then` again.
+4. Show the user the guide path and the gate. If it failed, the user (not you)
+   rewrites the flagged questions; then run the review again with a fresh run.

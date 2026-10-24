@@ -28,3 +28,13 @@ description: Gather evidence for a SparkWright Vision by interviewing the projec
 Never mark real interviews `--simulated`, and never use simulated evidence to
 back a Vision requirement. After evidence exists, help the owner cite it in
 `specs/vision.md` with the line grammar `- **V<n>** [E<n>] <requirement>`.
+
+## Interview guide for real users
+
+1. Run `sparkwright interview guide --about "<who the users are and what to learn>" --prepare --json`
+   (add `--minors` when any target users are under 18).
+2. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.step>`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only what it asks for." Write the agent's reply verbatim to `data.result_file`.
+3. Run the command in `data.then` with `--json`. While `data.step` is not `done`,
+   repeat step 2 for the agent it names, then run `data.then` again.
+4. Show the user the guide path and the gate. If it failed, the user (not you)
+   rewrites the flagged questions; then run the review again with a fresh run.

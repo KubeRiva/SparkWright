@@ -18,7 +18,7 @@ class TestNeutralSkills(unittest.TestCase):
         skills = load_skills()
         self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build", "sparkwright-descend"})
         for s in skills:
-            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z", run_architect="W"))
+            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z", run_architect="W", run_guide_agent="V"))
 
 
 class TestClaudeCodeAdapter(unittest.TestCase):
