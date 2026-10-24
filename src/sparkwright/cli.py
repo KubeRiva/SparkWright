@@ -399,6 +399,8 @@ def cmd_build(args) -> int:
                 runs = (root / ".sparkwright" / "runs").resolve()
                 if runs not in path.parents:
                     raise BuildError("--result must be a file inside .sparkwright/runs/")
+                if not path.is_file():
+                    raise BuildError(f"result file {src} does not exist; save the agent's final reply there first")
                 text = path.read_text(encoding="utf-8")
             ins = b.submit(args.done, text)
         elif args.next:

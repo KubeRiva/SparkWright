@@ -219,6 +219,10 @@ class TestMedium(unittest.TestCase):
             code, out = run_cli(r, "build", "C1.1.1.T1", "--done", "test-author", "--result", "elsewhere.json")
             self.assertEqual(code, 1)
             self.assertIn("inside .sparkwright/runs", out["data"]["error"])
+            code, out = run_cli(r, "build", "C1.1.1.T1", "--done", "test-author", "--result",
+                                ".sparkwright/runs/build-C1.1.1.T1/missing.json")
+            self.assertEqual(code, 1)
+            self.assertIn("does not exist", out["data"]["error"])
 
 
 if __name__ == "__main__":
