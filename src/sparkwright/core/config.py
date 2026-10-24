@@ -28,7 +28,8 @@ DEFAULTS: dict = {
     "test_globs": ["tests/**/*", "test/**/*", "**/*_test.*", "**/*.test.*", "**/test_*.py"],
     # Paths no agent role may change, whatever the config says (S6.5, S6.6).
     "always_protected": [".sparkwright/config.yaml", "specs/approvals.jsonl", "specs/constitution.md",
-                         "AGENTS.md", "CLAUDE.md", ".claude/**", "personas/**"],
+                         "AGENTS.md", "CLAUDE.md", "GEMINI.md", ".claude/**", ".codex/**", ".agents/**", ".gemini/**",
+                         "personas/**"],
     "protected": {
         "builder": ["specs/**", ".sparkwright/config.yaml", "AGENTS.md", "personas/**"],
         "test-author": ["src/**", "specs/**"],

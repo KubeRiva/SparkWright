@@ -17,7 +17,7 @@ step runs in a fresh agent so no role grades its own work.
    property-tester (only when the task declares invariants), builder, code-reviewer, and
    security-reviewer (only for `risk: high` tasks). Every merge of a high-risk task needs a human.
 2. Look at `data.kind` in the output:
-   - `agent`: launch ONE agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.persona>`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Work only inside <data.workspace>. When finished, reply with only the JSON the instructions ask for." Pass no conversation history or opinion. Write the agent's final reply verbatim to `data.result_file`.
+   - `agent`: launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.persona>`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Work only inside <data.workspace>. When finished, reply with only the JSON the instructions ask for." Pass no conversation history or opinion. Write the agent's final reply verbatim to `data.result_file`.
      Then run the command in `data.then` with `--json`, and go back to step 2.
    - `human` with `step` `ready`: tell the user the branch name and mutation
      score, and that they should review and merge it. Stop.

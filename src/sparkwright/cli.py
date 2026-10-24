@@ -536,7 +536,7 @@ def cmd_mutate(args) -> int:
 
 def cmd_guard(args) -> int:
     from .adapters import guard
-    return guard.main()
+    return guard.main(args.host)
 
 
 def cmd_adapt(args) -> int:
@@ -554,6 +554,19 @@ def cmd_adapt(args) -> int:
         rel = out.relative_to(root) if out.is_relative_to(root) else out
         return _emit(args, "adapt", True, {"out": str(rel), "files": written + extra},
                      f"Generated Claude Code plugin in {rel} ({len(written)} files)." + (f" Marketplace: {extra[0]}" if extra else ""))
+    if args.host in ("codex", "gemini"):
+        from .adapters import codex, gemini
+        mod = codex if args.host == "codex" else gemini
+        default = root if args.host == "codex" else root / "adapters" / "gemini"
+        out = Path(args.out) if args.out else default
+        if not out.is_absolute():
+            out = root / out
+        written = mod.generate(out, root)
+        rel = out.relative_to(root) if out.is_relative_to(root) else out
+        how = ("Codex reads .agents/skills, .codex/agents and .codex/hooks.json in this project; trust the hook once "
+               "with /hooks." if args.host == "codex" else f"Install with: gemini extensions install {out}")
+        return _emit(args, "adapt", True, {"out": str(rel), "files": written},
+                     f"Generated {args.host} adapter in {rel} ({len(written)} files). {how}")
     from .adapters import agents_md
     path = agents_md.write(root)
     return _emit(args, "adapt", True, {"path": str(path.relative_to(root))},
@@ -765,9 +778,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-cmd", help="test command (default: checks.test in config)")
     sp.add_argument("--budget", help="time budget in seconds")
     sp.set_defaults(func=cmd_mutate)
-    sub.add_parser("guard", help="PreToolUse hook for host agents (reads hook JSON on stdin)").set_defaults(func=cmd_guard)
+    sp = sub.add_parser("guard", help="pre-tool hook for host agents (reads hook JSON on stdin)")
+    sp.add_argument("--host", choices=["claude-code", "codex", "gemini"], default="claude-code")
+    sp.set_defaults(func=cmd_guard)
     sp = common(sub.add_parser("adapt", help="generate host adapters: claude-code plugin or AGENTS.md section"))
-    sp.add_argument("host", choices=["claude-code", "agents-md"])
+    sp.add_argument("host", choices=["claude-code", "codex", "gemini", "agents-md"])
     sp.add_argument("--out", help="output directory for the plugin (default adapters/claude-code)")
     sp.add_argument("--marketplace", action="store_true", help="also write .claude-plugin/marketplace.json at the repo root")
     sp.set_defaults(func=cmd_adapt)

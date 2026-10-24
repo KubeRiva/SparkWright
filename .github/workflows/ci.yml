@@ -19,4 +19,7 @@ jobs:
       - name: Generated adapter is up to date
         run: |
           sparkwright adapt claude-code --marketplace
+          sparkwright adapt codex --out adapters/codex
+          sparkwright adapt gemini
           git diff --exit-code -- adapters .claude-plugin
+          test -z "$(git status --porcelain -- adapters)"

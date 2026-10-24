@@ -6,8 +6,8 @@ prints a permission decision. Shipping it inside the CLI keeps it cross-platform
 import json, os, re, sys
 from pathlib import Path
 
-HUMAN_GATED = {"specs/constitution.md", "agents.md", "claude.md", ".sparkwright/config.yaml"}
-GATED_PREFIXES = ("personas/", ".claude/")
+HUMAN_GATED = {"specs/constitution.md", "agents.md", "claude.md", "gemini.md", ".sparkwright/config.yaml"}
+GATED_PREFIXES = ("personas/", ".claude/", ".codex/", ".agents/", ".gemini/")
 FOLD = sys.platform.startswith(("win", "darwin"))  # case-insensitive file systems
 
 
@@ -64,26 +64,67 @@ def decide_bash(cmd):
         return "deny", "Agents may not touch approvals, events or SparkWright run state."
     if re.search(r"\bsparkwright\b[^|;&\n]*\bapprove\b", cmd, re.I):
         return "deny", "`sparkwright approve` records a human decision; ask the user to run it."
-    if re.search(r"constitution\.md|\.sparkwright/config\.yaml|AGENTS\.md|CLAUDE\.md|\.claude/|personas/", cmd, re.I):
+    if re.search(r"constitution\.md|\.sparkwright/config\.yaml|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.claude/|\.codex/|"
+                 r"\.agents/|\.gemini/|personas/", cmd, re.I):
         return "ask", "This command touches a SparkWright human-gated file; confirm it."
     return None, ""
 
 
-def main():
+PATCH_PATH = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+?)\s*$", re.M)
+RANK = {None: 0, "ask": 1, "deny": 2}
+
+
+def _cmd(tool_input):
+    c = tool_input.get("command", "")
+    return " ".join(map(str, c)) if isinstance(c, list) else str(c)
+
+
+def _targets(host, tool_name, tool_input):
+    """(kind, values): kind is 'bash' with the command, or 'paths' with the files a tool call would write."""
+    if host == "codex":
+        if tool_name == "apply_patch":
+            return "paths", PATCH_PATH.findall(_cmd(tool_input) or str(tool_input.get("input") or ""))
+        return "bash", [_cmd(tool_input)]
+    if host == "gemini":
+        if tool_name == "run_shell_command":
+            return "bash", [_cmd(tool_input)]
+        target = tool_input.get("file_path") or tool_input.get("absolute_path") or tool_input.get("path")
+        return "paths", [target] if target else []
+    if tool_name == "Bash" or ("command" in tool_input and "file_path" not in tool_input):
+        return "bash", [str(tool_input.get("command", ""))]
+    target = tool_input.get("file_path") or tool_input.get("notebook_path")
+    return "paths", [target] if target else []
+
+
+def decide(host, root, tool_name, tool_input):
+    kind, values = _targets(host, tool_name, tool_input or {})
+    best = (None, "")
+    for v in values:
+        d = decide_bash(v) if kind == "bash" else decide_path(root, v)
+        if RANK[d[0]] > RANK[best[0]]:
+            best = d
+    return best
+
+
+def main(host="claude-code"):
     try:
         data = json.loads(sys.stdin.read() or "{}")
     except Exception:
         return 0
-    root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or ".").resolve()
-    tool_input = data.get("tool_input") or {}
-    if data.get("tool_name") == "Bash" or ("command" in tool_input and "file_path" not in tool_input):
-        decision, reason = decide_bash(str(tool_input.get("command", "")))
+    env_root = {"claude-code": "CLAUDE_PROJECT_DIR", "gemini": "GEMINI_PROJECT_DIR"}.get(host, "")
+    root = Path((env_root and os.environ.get(env_root)) or data.get("cwd") or ".").resolve()
+    decision, reason = decide(host, root, data.get("tool_name"), data.get("tool_input") or {})
+    if not decision:
+        return 0
+    if host == "gemini":  # Gemini CLI: decision deny/allow; no interactive ask from hooks
+        reason = reason if decision == "deny" else reason + " Ask the user to make this change."
+        print(json.dumps({"decision": "deny", "reason": reason}))
+    elif host == "codex":  # Codex does not support "ask" yet: deny and tell the agent to ask the user
+        reason = reason if decision == "deny" else reason + " Ask the user to make this change."
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                                 "permissionDecisionReason": reason}}))
     else:
-        target = tool_input.get("file_path") or tool_input.get("notebook_path")
-        decision, reason = decide_path(root, target) if target else (None, "")
-    if decision:
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse",
-                                                 "permissionDecision": decision,
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision,
                                                  "permissionDecisionReason": reason}}))
     return 0
 

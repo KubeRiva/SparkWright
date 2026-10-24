@@ -14,62 +14,16 @@ from pathlib import Path
 from .. import __version__
 from ..runner.personas import load_all
 from .neutral import load_skills
+from .slots import CLAUDE, slots
 
 PLUGIN = "sparkwright"
 REVIEW_PERSONAS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devils-advocate",
                    "buildability-checker", "security-reviewer", "code-reviewer", "theme-synthesizer", "architect",
                    "guide-writer", "question-auditor", "surveyor"]
 
-RUN_CALIBRATION_JOBS = (
-    "For EACH job in `data.jobs` (run up to 6 at a time in parallel), launch the Agent tool with `subagent_type` "
-    "`sparkwright:sparkwright-<job.persona>` and ONLY this task text: \"Review the artifact in <absolute path of "
-    "job.context>. Return only the JSON array.\" Never tell an agent what flaw to look for. Write each reply "
-    "verbatim to `job.result_file`. Wait for all jobs."
-)
-
-RUN_SURVEYOR = (
-    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-surveyor`, and ONLY this task "
-    "text: \"Read <absolute path of data.prompt> and follow it. Reply with only the JSON object.\" Write the agent's "
-    "reply verbatim to `data.result_file`."
-)
-
-RUN_GUIDE_AGENT = (
-    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.step>`, and ONLY this "
-    "task text: \"Read <absolute path of data.prompt> and follow it. Reply with only what it asks for.\" Write the "
-    "agent's reply verbatim to `data.result_file`."
-)
-
-RUN_ARCHITECT = (
-    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-architect`, "
-    "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Reply with only the Markdown it asks for.\" "
-    "Pass no conversation history or opinion. Write the agent's reply verbatim to `data.result_file`."
-)
-
-RUN_SYNTHESIZER = (
-    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-theme-synthesizer`, "
-    "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Reply with only the JSON object.\" "
-    "You conducted the interview, so you must not write the themes yourself. Write the agent's reply verbatim to `data.result_file`."
-)
 BUILD_PERSONAS = ["test-author", "property-tester", "builder"]  # need to edit files and run tests in the task workspace
 
-RUN_BUILD_AGENT = (
-    "launch ONE agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.persona>`, "
-    "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Work only inside "
-    "<data.workspace>. When finished, reply with only the JSON the instructions ask for.\" Pass no "
-    "conversation history or opinion. Write the agent's final reply verbatim to `data.result_file`."
-)
-
-RUN_AGENTS = (
-    "For EACH name in `personas`, launch the Agent tool in parallel with "
-    "`subagent_type` set to `sparkwright:sparkwright-<persona>` (for example "
-    "`sparkwright:sparkwright-coverage-auditor`). Give each agent ONLY this task text: "
-    "\"Review the artifact in <absolute path of context>. Return only the JSON array.\" "
-    "Do not pass any conversation history, summaries or your own opinion. When each "
-    "agent returns, write its reply verbatim to `<outputs_dir>/<persona>.json`. "
-    "Wait for all agents before continuing."
-)
-
-
+SLOTS = slots(CLAUDE)
 
 
 def _agent_md(persona, build: bool = False) -> str:
@@ -128,7 +82,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
         put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name], build=True))
         agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
     for skill in load_skills():
-        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT, run_guide_agent=RUN_GUIDE_AGENT, run_surveyor=RUN_SURVEYOR, run_calibration_jobs=RUN_CALIBRATION_JOBS)
+        body = skill.render(**SLOTS)
         put(f"skills/{skill.name}/SKILL.md",
             f"---\nname: {skill.name}\ndescription: {skill.description}\n---\n\n{body.strip()}\n")
     manifest = {

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sparkwright guard --host codex",
+            "timeout": 30,
+            "statusMessage": "SparkWright guard"
+          }
+        ]
+      }
+    ]
+  }
+}

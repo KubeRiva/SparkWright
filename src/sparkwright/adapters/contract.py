@@ -38,6 +38,18 @@ CAPABILITIES: dict[str, dict[str, Optional[str]]] = {
         "enforce_paths": "host: PreToolUse guard hook (Write/Edit/Bash) + `sparkwright check`",
         "model_for": "host: model: inherit",
     },
+    "codex": {
+        "spawn_agent": "host: custom agents in .codex/agents/*.toml spawned by the main agent",
+        "create_workspace": None,
+        "enforce_paths": "host: .codex/hooks.json PreToolUse guard (Bash, apply_patch) + `sparkwright check`",
+        "model_for": "host: session model",
+    },
+    "gemini": {
+        "spawn_agent": "host: extension subagents (agents/*.md, own context window)",
+        "create_workspace": None,
+        "enforce_paths": "host: hooks/hooks.json BeforeTool guard (write_file, replace, run_shell_command) + `sparkwright check`",
+        "model_for": "host: model: inherit",
+    },
     "agents-md": {
         "spawn_agent": None,
         "create_workspace": None,

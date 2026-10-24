@@ -13,7 +13,7 @@ conversation that produced it.
    report them and stop.
 2. Run `sparkwright review <ID> --prepare --json`. Note `run_id`, `context`,
    `outputs_dir` and `personas` from the output.
-3. For EACH name in `personas`, launch the Agent tool in parallel with `subagent_type` set to `sparkwright:sparkwright-<persona>` (for example `sparkwright:sparkwright-coverage-auditor`). Give each agent ONLY this task text: "Review the artifact in <absolute path of context>. Return only the JSON array." Do not pass any conversation history, summaries or your own opinion. When each agent returns, write its reply verbatim to `<outputs_dir>/<persona>.json`. Wait for all agents before continuing.
+3. For EACH name in `personas`, launch the Agent tool in parallel with `subagent_type` set to: `subagent_type` `sparkwright:sparkwright-<persona>`. Give each agent ONLY this task text: "Review the artifact in <absolute path of context>. Return only the JSON array." Do not pass any conversation history, summaries or your own opinion. When each agent returns, write its reply verbatim to `<outputs_dir>/<persona>.json`. Wait for all agents before continuing.
 4. Run `sparkwright review <ID> --collect <run_id>`.
 5. Tell the user the gate result and the path of the review file, and list
    the high-severity findings in one line each. Do not fix findings unless the

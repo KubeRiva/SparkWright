@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "write_file|replace|run_shell_command",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "sparkwright guard --host gemini",
+            "name": "sparkwright-guard",
+            "timeout": 30000
+          }
+        ]
+      }
+    ]
+  }
+}

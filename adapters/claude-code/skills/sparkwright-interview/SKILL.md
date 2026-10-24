@@ -15,7 +15,7 @@ description: Gather evidence for a SparkWright Vision by interviewing the projec
    suggest answers. Usually 6–10 questions.
 4. Write the transcript to `data.transcript`, then run the command in
    `data.then` with `--json`.
-5. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-theme-synthesizer`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only the JSON object." You conducted the interview, so you must not write the themes yourself. Write the agent's reply verbatim to `data.result_file`.
+5. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-theme-synthesizer`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only the JSON object." Pass no conversation history, summaries or opinion. You conducted the interview, so you must not write the themes yourself. Write the agent's reply verbatim to `data.result_file`.
 6. Run `sparkwright interview collect <run_id> --json` and tell the owner which
    evidence file was written.
 
@@ -33,7 +33,7 @@ back a Vision requirement. After evidence exists, help the owner cite it in
 
 1. Run `sparkwright interview guide --about "<who the users are and what to learn>" --prepare --json`
    (add `--minors` when any target users are under 18).
-2. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.step>`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only what it asks for." Write the agent's reply verbatim to `data.result_file`.
+2. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.step>`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only what it asks for." Pass no conversation history, summaries or opinion. Write the agent's reply verbatim to `data.result_file`.
 3. Run the command in `data.then` with `--json`. While `data.step` is not `done`,
    repeat step 2 for the agent it names, then run `data.then` again.
 4. Show the user the guide path and the gate. If it failed, the user (not you)

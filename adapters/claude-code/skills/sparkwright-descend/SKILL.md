@@ -7,7 +7,7 @@ description: Draft the next level of a SparkWright spec under one approved requi
 
 1. Run `sparkwright descend <ID> --prepare --json`. If it stops because the
    parent is not approved, tell the user; only approved requirements descend.
-2. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-architect`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only the Markdown it asks for." Pass no conversation history or opinion. Write the agent's reply verbatim to `data.result_file`.
+2. Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-architect`, and ONLY this task text: "Read <absolute path of data.prompt> and follow it. Reply with only the Markdown it asks for." Pass no conversation history, summaries or opinion. Write the agent's reply verbatim to `data.result_file`.
 3. Run the command in `data.then` with `--json`. If the draft is rejected, show
    the reasons, run step 1 again for a fresh run, and pass the reasons to the
    new Architect agent as extra task text. Stop after two rejections.

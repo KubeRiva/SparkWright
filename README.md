@@ -59,7 +59,7 @@ Python 3.10+. One runtime dependency (PyYAML).
 | `sparkwright verify` | Run the project's checks from config | No |
 | `sparkwright mutate --base <rev>` | Saboteur: mutation-test the lines you changed | No |
 | `sparkwright change new <ID> \| apply <CR>` | Open or apply a change request when an approved spec is wrong | No |
-| `sparkwright adapt claude-code \| agents-md` | Generate host adapters | No |
+| `sparkwright adapt claude-code \| codex \| gemini \| agents-md` | Generate host adapters | No |
 | `sparkwright guard` | PreToolUse hook used by host adapters | No |
 
 ¹ Either a configured model provider (Runner mode), or a host coding agent
@@ -109,8 +109,15 @@ such as Ollama or vLLM). API keys are read from environment variables only.
   needed. A PreToolUse hook (`sparkwright guard`) stops agents from editing
   approvals, events, locked tests or git internals. See
   `docs/quickstart-claude-code.md`.
+- **OpenAI Codex:** `sparkwright adapt codex` writes repository skills
+  (`.agents/skills/`), custom agents (`.codex/agents/*.toml`) and a PreToolUse
+  guard hook (`.codex/hooks.json`; trust it once with `/hooks`).
+- **Gemini CLI:** `sparkwright adapt gemini` builds an extension (skills,
+  subagents, a BeforeTool guard hook); install it with
+  `gemini extensions install adapters/gemini`.
 - **Everything else:** `sparkwright adapt agents-md` writes a section into
-  `AGENTS.md`, which most coding agents read.
+  `AGENTS.md`, which most coding agents read; agent steps then run through the
+  Runner with your configured models.
 - **CI:** `sparkwright check` needs no network and no model.
 
 ## Dogfooding
