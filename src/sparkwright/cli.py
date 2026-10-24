@@ -188,12 +188,13 @@ def cmd_approve(args) -> int:
     if args.cr and args.cr not in checks.approved_change_requests(repo):
         return _emit(args, "approve", False, {"error": f"{args.cr} is not an approved change request"},
                      f"Refusing: {args.cr} is not an approved change request in specs/changes/.")
+    derived = {k: n.status for k, n in checks.run(root, write_ledger=False).nodes.items()}
     blocked = []
     for r in reqs:
         prev = latest.get(r.id)
-        if prev and prev.hash == r.hash:
+        if prev and prev.hash == r.hash and derived.get(r.id) != "changed":
             continue  # already approved as-is
-        if prev and prev.hash != r.hash and not args.cr:
+        if prev and (prev.hash != r.hash or derived.get(r.id) == "changed") and not args.cr:
             blocked.append(r.id)
             continue
         entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when))
@@ -386,12 +387,19 @@ def cmd_build(args) -> int:
     from .runner.build import Build, BuildError
     root = Path(args.root).resolve()
     try:
-        b = Build(root, args.id)
+        b = Build(root, args.id, restart=args.restart)
         if args.done:
             src = args.result
             if not src:
                 raise BuildError("--done needs --result <file> (the agent's reply), or '-' for stdin")
-            text = sys.stdin.read() if src == "-" else (root / src).read_text(encoding="utf-8")
+            if src == "-":
+                text = sys.stdin.read()
+            else:
+                path = (root / src).resolve()
+                runs = (root / ".sparkwright" / "runs").resolve()
+                if runs not in path.parents:
+                    raise BuildError("--result must be a file inside .sparkwright/runs/")
+                text = path.read_text(encoding="utf-8")
             ins = b.submit(args.done, text)
         elif args.next:
             ins = b.advance()
@@ -526,6 +534,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--next", action="store_true", help="host mode: run automatic steps and print the next agent step")
     sp.add_argument("--done", metavar="STEP", help="host mode: record the result of an agent step")
     sp.add_argument("--result", metavar="FILE", help="file holding the agent's reply ('-' for stdin)")
+    sp.add_argument("--restart", action="store_true", help="start a new run after a blocked build")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_build)
     common(sub.add_parser("verify", help="run the project's checks from config")).set_defaults(func=cmd_verify)

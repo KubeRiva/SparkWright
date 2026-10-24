@@ -126,7 +126,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for c in commits:
         c.tasks = [rn(t) for t in c.tasks]
     nodes = ledger.build(repo, latest, tests, commits)
-    built = {t for c in commits if c.role == "builder" for t in c.tasks}
+    built = {t for c in commits if c.role == "runner" and c.subject.strip().endswith(": ready") for t in c.tasks}
     for rid, st in derived.items():
         if st == "building" and rid in built:
             st = derived[rid] = "done"  # its build commit is on this branch (S2.8, merge detection)
@@ -211,7 +211,8 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     drift_exclude = cfg.get("drift_exclude", DRIFT_EXCLUDE_DEFAULT)
     task_ids = {rid for rid, r in repo.requirements.items() if r.kind == "task"}
     tracked_globs = [g for rid in task_ids if derived[rid] in APPROVED_LIKE for g in nodes[rid].files]
-    locked_tests = {aid[5:] for aid in latest if aid.startswith("test:")}
+    lock_idx = _lock_positions(root, cfg, commits, entries)
+    commit_pos = {c.sha: i for i, c in enumerate(commits)}
     for c in commits:
         short = c.sha[:12]
         spec_only = bool(c.files) and all(_glob_match(f, drift_exclude) for f in c.files)
@@ -239,11 +240,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                 continue
             forbidden = list(cfg.get("protected", {}).get(c.role, [])) + list(cfg.get("always_protected", []))
             for path in c.files:
-                if _glob_match(path, forbidden) or (c.role == "builder" and path in locked_tests):
+                if _glob_match(path, forbidden) or (path in lock_idx and lock_idx[path] < commit_pos[c.sha]):
                     add("error", "role.path-violation", f"commit {short} by role '{c.role}' changes protected path {path}", file=path)
 
     if gitlog.is_repo(root) and not any(f.code == "git.log-failed" for f in findings):
-        _verify_approvals(root, cfg, add)
+        _verify_approvals(root, cfg, add, {c.sha: c.role for c in commits})
         for rel in (approvals_mod.APPROVALS_PATH, events_mod.EVENTS_PATH):
             _append_only(root, cfg.get("baseline"), rel, add)
 
@@ -263,7 +264,43 @@ def rename_map(repo) -> dict[str, str]:
     return out
 
 
-def _verify_approvals(root: Path, cfg: dict, add) -> None:
+def _lock_positions(root: Path, cfg: dict, commits: list, entries: list) -> dict[str, int]:
+    """Test path -> position in `commits` of the commit that locked it (-1: locked at or before the baseline).
+
+    Uses git history, not timestamps, so the order is exact. Uncommitted locks are ignored here.
+    """
+    import json as _json
+    pos = {c.sha: i for i, c in enumerate(commits)}
+    out: dict[str, int] = {}
+    try:
+        added = gitlog.added_lines(root, approvals_mod.APPROVALS_PATH, cfg.get("baseline")) if commits else []
+    except gitlog.GitError:
+        added = []
+    after_baseline = set()
+    for line in added:
+        try:
+            d = _json.loads(line.text)
+        except _json.JSONDecodeError:
+            continue
+        aid = str(d.get("id", ""))
+        if aid.startswith("test:") and line.sha in pos:
+            out.setdefault(aid[5:], pos[line.sha])
+            after_baseline.add(aid[5:])
+    head = gitlog.show(root, "HEAD", approvals_mod.APPROVALS_PATH) if commits else None
+    committed = set()
+    for text in (head or "").splitlines():
+        try:
+            aid = str(_json.loads(text).get("id", ""))
+        except _json.JSONDecodeError:
+            continue
+        if aid.startswith("test:"):
+            committed.add(aid[5:])
+    for path in committed - after_baseline:
+        out[path] = -1
+    return out
+
+
+def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None) -> None:
     """S6.3: committed human approval lines must come from allowlisted authors."""
     import json
     approvers = {}
@@ -283,6 +320,11 @@ def _verify_approvals(root: Path, cfg: dict, add) -> None:
         except json.JSONDecodeError:
             continue
         role, who = d.get("role"), str(d.get("approver", "")).lower()
+        commit_role = (roles or {}).get(line.sha)
+        if commit_role and commit_role != "human" and (role != "runner" or not str(d.get("id", "")).startswith("test:")):
+            add("error", "approval.role-not-allowed",
+                f"commit {line.sha[:12]} by role '{commit_role}' added a non-test-lock approval for {d.get('id')}", id=d.get("id"))
+            continue
         if role == "runner":
             if not str(d.get("id", "")).startswith("test:"):
                 add("error", "approval.role-not-allowed", f"runner may only lock tests, not approve {d.get('id')} (commit {line.sha[:12]})", id=d.get("id"))

@@ -22,6 +22,7 @@ class Commit:
     role: str | None = None
     files: list[str] = field(default_factory=list)
     body: str = ""
+    time: str = ""  # committer date, ISO 8601
 
 
 class GitError(RuntimeError):
@@ -64,7 +65,7 @@ def commits(root: Path | str, baseline: str | None = None) -> list[Commit]:
         if _git(root, "cat-file", "-e", f"{baseline}^{{commit}}").returncode != 0:
             raise GitError(f"baseline commit {baseline} is not in this repository (shallow clone? fetch full history)")
     rng = f"{baseline}..HEAD" if baseline else "HEAD"
-    fmt = f"{_REC}%H{_FLD}%s{_FLD}%B{_FLD}"
+    fmt = f"{_REC}%H{_FLD}%s{_FLD}%cI{_FLD}%B{_FLD}"
     try:
         out = _git(root, "log", "--reverse", "--no-merges", "--no-renames", "--name-only", f"--format={fmt}", rng)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -74,10 +75,10 @@ def commits(root: Path | str, baseline: str | None = None) -> list[Commit]:
     result: list[Commit] = []
     for rec in out.stdout.split(_REC)[1:]:
         parts = rec.split(_FLD)
-        if len(parts) < 4:
+        if len(parts) < 5:
             continue
-        sha, subject, body, files_blob = parts[0], parts[1], parts[2], parts[3]
-        c = Commit(sha, subject, body=body)
+        sha, subject, ctime, body, files_blob = parts[0], parts[1], parts[2], parts[3], parts[4]
+        c = Commit(sha, subject, body=body, time=ctime.strip())
         for kind, value in TRAILER_RE.findall(body):
             if kind == "Task":
                 c.tasks.append(ids.canonical(value))

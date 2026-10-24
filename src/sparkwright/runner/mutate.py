@@ -38,6 +38,11 @@ class MutationReport:
     timed_out_budget: bool = False
     baseline_ok: bool = True
     message: str = ""
+    changed_source: int = 0      # changed source files considered
+
+    @property
+    def partial(self) -> bool:
+        return self.timed_out_budget
 
     @property
     def score(self) -> float:
@@ -150,11 +155,20 @@ def _run(cmd: str, cwd: Path, timeout: float) -> bool:
         raise TestCommandError(f"cannot run test command {cmd!r}: {exc}") from exc
 
 
-def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, per_test_timeout_s: float = 60) -> MutationReport:
+def _is_test(path: str, globs: list[str] | None) -> bool:
+    import fnmatch
+    if globs:
+        return any(fnmatch.fnmatch(path, g) or (g.endswith("/**") and path.startswith(g[:-2])) for g in globs)
+    return Path(path).name.startswith("test_") or "/tests/" in f"/{path}"
+
+
+def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, per_test_timeout_s: float = 60,
+        test_globs: list[str] | None = None) -> MutationReport:
     root = Path(root).resolve()
     report = MutationReport()
     targets = changed_lines(root, base)
-    targets = {f: l for f, l in targets.items() if not Path(f).name.startswith("test_") and "/tests/" not in f"/{f}"}
+    targets = {f: l for f, l in targets.items() if not _is_test(f, test_globs)}
+    report.changed_source = len(targets)
     if not targets:
         report.message = "no changed Python source lines to mutate"
         return report
@@ -195,5 +209,9 @@ def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, 
                     report.survivors.append(m)
                 else:
                     report.killed += 1
-    report.message = f"mutation score {report.score:.2f} ({report.killed}/{report.total} killed)"
+    if report.total == 0:
+        report.message = "no mutants could be generated from the changed source lines"
+    else:
+        report.message = f"mutation score {report.score:.2f} ({report.killed}/{report.total} killed)" + (
+            " (partial: time budget reached)" if report.partial else "")
     return report

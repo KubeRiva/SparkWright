@@ -51,17 +51,17 @@ def norm(rel):
     return rel.lower() if FOLD else rel
 
 
-def locked_tests(root):
+def locked_tests(root, ws=None):
     out = set()
-    appr = root / "specs" / "approvals.jsonl"
-    if appr.is_file():
-        for line in appr.read_text(encoding="utf-8").splitlines():
-            try:
-                i = json.loads(line).get("id", "")
-            except ValueError:
-                continue
-            if i.startswith("test:"):
-                out.add(norm(i[5:]))
+    for appr in [root / "specs" / "approvals.jsonl"] + ([ws / "specs" / "approvals.jsonl"] if ws else []):
+        if appr.is_file():
+            for line in appr.read_text(encoding="utf-8").splitlines():
+                try:
+                    i = json.loads(line).get("id", "")
+                except ValueError:
+                    continue
+                if i.startswith("test:"):
+                    out.add(norm(i[5:]))
     return out
 
 
@@ -70,12 +70,21 @@ def decide_path(root, target):
     if not p.is_absolute():
         p = root / p
     try:
-        rel = norm(p.resolve().relative_to(root).as_posix())
+        rel = p.resolve().relative_to(root).as_posix()
     except ValueError:
         return None, ""
-    if rel == norm("specs/approvals.jsonl"):
-        return "deny", "Approvals are recorded only by a human running `sparkwright approve`."
-    if rel in locked_tests(root):
+    ws = None
+    m = re.match(r"^\.sparkwright/worktrees/([^/]+)/(.*)$", rel)
+    if m:  # a build workspace: apply the same rules relative to the workspace root
+        ws, rel = root / ".sparkwright" / "worktrees" / m.group(1), m.group(2)
+    elif rel.startswith(".sparkwright/"):
+        return "deny", "SparkWright run state is written only by the sparkwright CLI."
+    rel = norm(rel)
+    if rel == norm("specs/approvals.jsonl") or rel == norm("specs/events.jsonl"):
+        return "deny", "Approvals and events are recorded only by the sparkwright CLI."
+    if rel == ".git" or rel.startswith(".git/"):
+        return "deny", "Agents may not edit git internals."
+    if rel in locked_tests(root, ws):
         return "deny", f"{rel} is a locked test; changing it needs an approved change request."
     if rel in {norm(h) for h in HUMAN_GATED} or rel.lower() in HUMAN_GATED or rel.startswith(GATED_PREFIXES):
         return "ask", f"{rel} is human-gated in SparkWright; confirm this change."
@@ -83,8 +92,8 @@ def decide_path(root, target):
 
 
 def decide_bash(cmd):
-    if re.search(r"approvals\.jsonl", cmd, re.I):
-        return "deny", "Agents may not touch specs/approvals.jsonl; approvals are human-only."
+    if re.search(r"approv[^\s/]*\.jsonl|approv\w*\*|events\.jsonl|\.sparkwright/(runs|ledger)", cmd, re.I):
+        return "deny", "Agents may not touch approvals, events or SparkWright run state."
     if re.search(r"\bsparkwright\b[^|;&\n]*\bapprove\b", cmd, re.I):
         return "deny", "`sparkwright approve` records a human decision; ask the user to run it."
     if re.search(r"constitution\.md|\.sparkwright/config\.yaml|AGENTS\.md|CLAUDE\.md|\.claude/|personas/", cmd, re.I):
