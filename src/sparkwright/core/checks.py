@@ -9,6 +9,7 @@ from pathlib import Path
 from . import annotations, approvals as approvals_mod, config as config_mod, events as events_mod, gitlog, ids, ledger, status as status_mod, store
 
 APPROVED_LIKE = {"approved", "building", "done"}
+RUNNER_PATHS = ["specs/approvals.jsonl", "specs/events.jsonl", "specs/reviews/*"]
 DRIFT_EXCLUDE_DEFAULT = ["specs/**", ".sparkwright/**", "*.md", ".gitignore", "LICENSE", "NOTICE", "personas/**", "templates/**"]
 
 
@@ -125,7 +126,10 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for c in commits:
         c.tasks = [rn(t) for t in c.tasks]
     nodes = ledger.build(repo, latest, tests, commits)
+    built = {t for c in commits if c.role == "builder" for t in c.tasks}
     for rid, st in derived.items():
+        if st == "building" and rid in built:
+            st = derived[rid] = "done"  # its build commit is on this branch (S2.8, merge detection)
         nodes[rid].status = st
 
     # --- references (S1.2, S1.4) ---
@@ -168,7 +172,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for k in sorted(not_started, key=ids.PYRAMID.index):
         add("info", "coverage.level-not-started", f"no {k} requirements yet; coverage below that level is not checked")
     for rid, r in repo.requirements.items():
-        if r.kind == "task" and derived[rid] in APPROVED_LIKE and not nodes[rid].tests:
+        if r.kind == "task" and derived[rid] == "done" and not nodes[rid].tests:
             add("error", "task.no-test", f"task {rid} is {derived[rid]} but no test references it", id=rid, file=r.file, line=r.line)
 
     # --- approvals and locks (S2.4) ---
@@ -228,6 +232,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             for path in c.files:
                 if path not in c.body:
                     add("error", "commit.unlisted-file", f"commit {short} by role '{c.role}' changes {path} without listing it in the message", file=path)
+            if c.role == "runner":  # the Runner may only append logs and write review files
+                for path in c.files:
+                    if not _glob_match(path, RUNNER_PATHS):
+                        add("error", "role.path-violation", f"commit {short} by role 'runner' changes {path}; the runner may only change {RUNNER_PATHS}", file=path)
+                continue
             forbidden = list(cfg.get("protected", {}).get(c.role, [])) + list(cfg.get("always_protected", []))
             for path in c.files:
                 if _glob_match(path, forbidden) or (c.role == "builder" and path in locked_tests):

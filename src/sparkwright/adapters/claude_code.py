@@ -17,7 +17,15 @@ from .neutral import load_skills
 
 PLUGIN = "sparkwright"
 REVIEW_PERSONAS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devils-advocate",
-                   "buildability-checker", "security-reviewer"]
+                   "buildability-checker", "security-reviewer", "code-reviewer"]
+BUILD_PERSONAS = ["test-author", "builder"]  # need to edit files and run tests in the task workspace
+
+RUN_BUILD_AGENT = (
+    "launch ONE agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.persona>`, "
+    "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Work only inside "
+    "<data.workspace>. When finished, reply with only the JSON the instructions ask for.\" Pass no "
+    "conversation history or opinion. Write the agent's final reply verbatim to `data.result_file`."
+)
 
 RUN_AGENTS = (
     "For EACH name in `personas`, launch the Agent tool in parallel with "
@@ -108,8 +116,25 @@ if __name__ == "__main__":
 """
 
 
-def _agent_md(persona) -> str:
+def _agent_md(persona, build: bool = False) -> str:
     desc = persona.job.replace("\n", " ")
+    if build:
+        return (
+            "---\n"
+            f"name: {PLUGIN}-{persona.name}\n"
+            f"description: SparkWright {persona.name}. {desc}\n"
+            "tools: [Read, Grep, Glob, Edit, Write, Bash]\n"
+            "model: inherit\n"
+            "omitClaudeMd: true\n"
+            "---\n\n"
+            f"{persona.prompt.strip()}\n\n"
+            "## Rules for this host\n\n"
+            "- Your task text names a prompt file and a workspace. Read the prompt file first.\n"
+            "- Edit files only inside the workspace. SparkWright reverts anything you change outside your allowed paths.\n"
+            "- You may run the project's tests with Bash inside the workspace.\n"
+            "- Never touch specs/approvals.jsonl or run `sparkwright approve`.\n"
+            "- Finish with only the JSON reply the instructions ask for.\n"
+        )
     return (
         "---\n"
         f"name: {PLUGIN}-{persona.name}\n"
@@ -143,8 +168,11 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
     for name in REVIEW_PERSONAS:
         put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name]))
         agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
+    for name in BUILD_PERSONAS:
+        put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name], build=True))
+        agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
     for skill in load_skills():
-        body = skill.render(run_agents=RUN_AGENTS)
+        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT)
         put(f"skills/{skill.name}/SKILL.md",
             f"---\nname: {skill.name}\ndescription: {skill.description}\n---\n\n{body.strip()}\n")
     put("hooks/guard.py", GUARD, 0o755)

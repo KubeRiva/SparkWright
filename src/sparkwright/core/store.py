@@ -11,6 +11,7 @@ from .grammar import ParseIssue, Requirement, parse_body
 REQUIRED_META = ("id", "title", "type", "status")
 STATUSES = {"draft", "in-review", "approved", "building", "done", "blocked", "changed", "rejected"}
 EVIDENCE_STATUSES = STATUSES | {"confirmed"}
+CHANGE_STATUSES = {"open", "approved", "rejected", "applied", "blocked"}
 
 
 @dataclass
@@ -87,10 +88,12 @@ def load(root: Path | str) -> Repo:
             missing.append("risk")
         if missing:
             sf.issues.append(ParseIssue("frontmatter.missing-field", f"missing front matter fields: {missing}", 1))
-        allowed = EVIDENCE_STATUSES if meta.get("type") == "evidence" else STATUSES
+        allowed = {"evidence": EVIDENCE_STATUSES, "change": CHANGE_STATUSES}.get(meta.get("type"), STATUSES)
         if "status" in meta and str(meta["status"]) not in allowed:
             sf.issues.append(ParseIssue("frontmatter.invalid-status", f"unknown status '{meta['status']}'", 1))
         reqs, issues = parse_body(body, rel, first)
+        if meta.get("type") in ("change", "review"):
+            reqs = []  # quoted requirement lines in change requests and reviews are not definitions
         sf.requirements, sf.issues = reqs, sf.issues + issues
         files.append(sf)
         if meta.get("type") == "evidence" and sf.id and ids.kind_of(sf.id) == "evidence":

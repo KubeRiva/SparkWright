@@ -13,7 +13,10 @@
     "./agents/sparkwright-newcomer.md",
     "./agents/sparkwright-devils-advocate.md",
     "./agents/sparkwright-buildability-checker.md",
-    "./agents/sparkwright-security-reviewer.md"
+    "./agents/sparkwright-security-reviewer.md",
+    "./agents/sparkwright-code-reviewer.md",
+    "./agents/sparkwright-test-author.md",
+    "./agents/sparkwright-builder.md"
   ],
   "hooks": {
     "PreToolUse": [

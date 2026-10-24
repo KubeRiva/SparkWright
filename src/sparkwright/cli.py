@@ -175,7 +175,7 @@ def cmd_approve(args) -> int:
             return _emit(args, "approve", False, {"error": "file has parse errors"},
                          f"Refusing: {sf.path} has parse errors; run `sparkwright check`.")
         reqs = sf.requirements
-        if sf.meta.get("type") == "evidence":
+        if sf.meta.get("type") in ("evidence", "change"):
             body_hash = checks.evidence_hash(root / sf.path)
             entries.append(Approval(sf.id, body_hash, args.approver, args.role, args.cr, when))
     elif target in repo.requirements:
@@ -243,7 +243,7 @@ def cmd_init(args) -> int:
         if email and "approvers: []" in text:
             cfg.write_text(text.replace("approvers: []", f"approvers:\n  - {{name: \"{name or email}\", email: \"{email}\"}}"), encoding="utf-8")
     gi = root / ".gitignore"
-    wanted = [".sparkwright/ledger.json", ".sparkwright/runs/"]
+    wanted = [".sparkwright/ledger.json", ".sparkwright/runs/", ".sparkwright/worktrees/"]
     existing = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
     missing = [w for w in wanted if w not in existing]
     if missing:
@@ -381,6 +381,93 @@ def cmd_adapt(args) -> int:
     return _emit(args, "adapt", True, {"path": str(path.relative_to(root))},
                  f"Updated {path.relative_to(root)} (human-gated: review and commit it yourself).")
 
+
+def cmd_build(args) -> int:
+    from .runner.build import Build, BuildError
+    root = Path(args.root).resolve()
+    try:
+        b = Build(root, args.id)
+        if args.done:
+            src = args.result
+            if not src:
+                raise BuildError("--done needs --result <file> (the agent's reply), or '-' for stdin")
+            text = sys.stdin.read() if src == "-" else (root / src).read_text(encoding="utf-8")
+            ins = b.submit(args.done, text)
+        elif args.next:
+            ins = b.advance()
+        else:
+            ins = b.run(_router(args, root))
+    except (BuildError, ProviderError, RoleFailed) as exc:
+        return _emit(args, "build", False, {"error": str(exc)}, f"Error: {exc}")
+    if ins["kind"] == "agent":
+        text = (f"Next step for {ins['task']}: run the '{ins['persona']}' agent with a fresh context on\n"
+                f"  {ins['prompt']}\nin workspace {ins['workspace']}. Save its final reply to {ins['result_file']}, then:\n  {ins['then']}")
+    elif ins["step"] == "ready":
+        text = ins["message"] + (f" Mutation score: {ins['mutation_score']}." if "mutation_score" in ins else "")
+    elif ins["step"] == "changed":
+        text = f"Build stopped: the spec needs to change. Review {ins['change_request']} (target {ins['target']})."
+    else:
+        text = f"Build {ins['step']}: {ins.get('reason', '')}"
+    ok = ins["step"] not in ("blocked",)
+    return _emit(args, "build", ok, ins, text)
+
+
+def cmd_verify(args) -> int:
+    from .core import config as config_mod
+    from .runner.verify import run_checks
+    root = Path(args.root).resolve()
+    cfg, _ = config_mod.load(root)
+    if not cfg.get("checks"):
+        return _emit(args, "verify", False, {"error": "no checks configured"}, "Add commands under `checks:` in .sparkwright/config.yaml.")
+    results = run_checks(root, cfg["checks"])
+    ok = all(r.ok for r in results)
+    lines = [f"{'PASS' if r.ok else 'FAIL'}  {r.name}: {r.command}" + ("" if r.ok else "\n" + r.output[-1500:]) for r in results]
+    return _emit(args, "verify", ok, {"results": [{"name": r.name, "ok": r.ok} for r in results]}, "\n".join(lines))
+
+
+def cmd_change(args) -> int:
+    from .core import events as events_mod
+    root = Path(args.root).resolve()
+    repo = store.load(root)
+    if args.action == "new":
+        target = ids.canonical(args.target or "")
+        if target not in repo.requirements:
+            return _emit(args, "change", False, {"error": f"unknown requirement {target}"}, f"Unknown requirement: {target}")
+        nums = [int(sf.id[2:]) for sf in repo.files if sf.id and ids.kind_of(sf.id) == "change"]
+        cr = f"CR{max(nums or [0]) + 1}"
+        path = root / "specs" / "changes" / f"{cr}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        r = repo.requirements[target]
+        path.write_text(f"---\nid: {cr}\ntitle: Change {target}\ntype: change\nstatus: open\ntarget: {target}\n"
+                        f"raised_by: human\nrounds: 0\n---\n\n## Reason\n\n{args.reason or ''}\n\n## ADDED\n\n"
+                        f"## MODIFIED\n\n- **{target}** [{', '.join(r.refs)}] {r.text}\n\n## REMOVED\n", encoding="utf-8")
+        return _emit(args, "change", True, {"change_request": str(path.relative_to(root))},
+                     f"Opened {path.relative_to(root)}. Edit the MODIFIED line, then a human approves it with `sparkwright approve {cr} --as <name>`.")
+    # apply
+    cr = ids.canonical(args.target or "")
+    sf = next((f for f in repo.files if f.id == cr), None)
+    if sf is None:
+        return _emit(args, "change", False, {"error": f"unknown change request {cr}"}, f"Unknown change request: {cr}")
+    if sf.status != "approved":
+        return _emit(args, "change", False, {"error": "not approved"}, f"{cr} is '{sf.status}'; it must be approved first.")
+    res = checks.run(root, write_ledger=False)
+    target = ids.canonical(str(sf.meta.get("target", "")))
+    if target not in res.nodes:
+        return _emit(args, "change", False, {"error": f"unknown target {target}"}, f"{cr} targets unknown {target}.")
+    tree = ledger.descendants(res.nodes, target)
+    affected, stack = [], [tree]
+    while stack:
+        t = stack.pop()
+        affected.append(t["id"])
+        stack.extend(t["children"])
+    changed = [a for a in affected if res.nodes[a].status in ("approved", "building", "done")]
+    events_mod.append(root, [events_mod.make(a, "changed", reason=f"{cr} applied") for a in changed])
+    events_mod.append(root, [events_mod.make(target, "cr-applied", reason=cr)])
+    _set_status(root / sf.path, "applied")
+    return _emit(args, "change", True, {"affected": sorted(affected, key=ids.sort_key), "marked_changed": changed},
+                 f"Applied {cr}. Marked changed: {', '.join(changed) or 'none'}. Edit {target}, review it, re-approve with "
+                 f"`sparkwright approve {target} --as <name> --cr {cr}`, then rebuild affected tasks.")
+
 # ---------------------------------------------------------------- main
 def build_parser() -> argparse.ArgumentParser:
     p = _Parser(prog="sparkwright", description="Evidence-backed, multi-level, verified spec-driven development.")
@@ -434,6 +521,19 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--out", help="output directory for the plugin (default adapters/claude-code)")
     sp.add_argument("--marketplace", action="store_true", help="also write .claude-plugin/marketplace.json at the repo root")
     sp.set_defaults(func=cmd_adapt)
+    sp = common(sub.add_parser("build", help="build a task: tests first, code, checks, mutation, review"))
+    sp.add_argument("id", help="task ID, e.g. C1.2.1.T1")
+    sp.add_argument("--next", action="store_true", help="host mode: run automatic steps and print the next agent step")
+    sp.add_argument("--done", metavar="STEP", help="host mode: record the result of an agent step")
+    sp.add_argument("--result", metavar="FILE", help="file holding the agent's reply ('-' for stdin)")
+    sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(func=cmd_build)
+    common(sub.add_parser("verify", help="run the project's checks from config")).set_defaults(func=cmd_verify)
+    sp = common(sub.add_parser("change", help="open or apply a change request"))
+    sp.add_argument("action", choices=["new", "apply"])
+    sp.add_argument("target", help="requirement ID (new) or CR ID (apply)")
+    sp.add_argument("--reason", help="why the change is needed (new)")
+    sp.set_defaults(func=cmd_change)
     return p
 
 

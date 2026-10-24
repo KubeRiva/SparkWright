@@ -55,6 +55,10 @@ class TestReferencesAndCoverage(unittest.TestCase):
             run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth")
             run_cli(r, "approve", "C1.1.2.T1", "--as", "Srikanth")
             res = checks.run(r)
+            self.assertNotIn("task.no-test", codes(res))  # approved tasks have no tests yet
+            from sparkwright.core import events
+            events.append(r, [events.make("C1.1.1.T1", "done"), events.make("C1.1.2.T1", "done")])
+            res = checks.run(r)
             self.assertIn("task.no-test", codes(res))
             write(r, "tests/test_t.py", "# sparkwright: C1.1.1.T1\n# sparkwright: C1.1.2.T1\n")
             res = checks.run(r)
