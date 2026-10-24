@@ -5,14 +5,19 @@ ids: []
 keywords: []
 flaw: null
 ---
-=== ARTIFACT (specs/components/C3-notify.md) ===
+=== ARTIFACT (specs/vision.md) ===
 ## Requirements
 
-- **C3.1.1** [S2.1] When `notify_cancellation(class_id)` runs, the notifier shall send one push message to each member with an active booking on that class.
-- **C3.1.2** [S2.1] When a push message fails, the notifier shall retry it up to 3 times at 1-minute intervals and then log the failure with the member ID.
+- **V1** [E1] When a member books a class, the studio app shall confirm the booking within the app.
+- **V2** [E1] When a class is cancelled by the studio, the app shall notify every booked member.
 
-=== PARENT (specs/system.md) ===
-- **S2.1** [V2] When the studio cancels a class, the system shall send a push notification to every member booked on it within 5 minutes.
+## Non-goals
+
+- Payments, memberships and pricing.
+
+=== EVIDENCE (E1) ===
+- Q1. Five studio owners said members phone the desk to check whether a booking went through.
+- Q2. Four of them said cancelling a class means phoning every booked member, which takes up to an hour.
 
 === CONSTITUTION ===
 Requirements use EARS form. No promotional adjectives. Every requirement must be testable.

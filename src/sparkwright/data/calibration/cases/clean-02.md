@@ -5,15 +5,21 @@ ids: []
 keywords: []
 flaw: null
 ---
-=== ARTIFACT (specs/components/C1-booking.md) ===
+=== ARTIFACT (specs/components/C5-credits.md) ===
+## Interfaces
+
+`Wallet.balance(member_id) -> int`; `Wallet.spend(member_id) -> None`; `Wallet.refund(member_id) -> None`. `NoCredit` is raised by `spend`.
+
 ## Requirements
 
-- **C1.1.1** [S1.1] When `book(member_id, class_id)` is called for a class with free spots, the booking service shall store a booking and decrement free spots by one.
-- **C1.1.2** [S1.1] When `book` is called for a class with no free spots, it shall raise `ClassFull` and change nothing.
-- **C1.1.3** [S1.1] When `book` is called twice for the same member and class, the second call shall raise `AlreadyBooked` and change nothing.
+- **C5.1.1** [S4.1] When `spend(member_id)` is called and the member's balance is at least 1, the wallet shall reduce the balance by exactly 1.
+- **C5.1.2** [S4.1] When `spend(member_id)` is called and the balance is 0, the wallet shall raise `NoCredit` and leave the balance at 0.
+- **C5.1.3** [S4.2] When `refund(member_id)` is called, the wallet shall increase the balance by exactly 1.
+- **C5.1.4** [S4.1, S4.2] `spend` and `refund` on the same member shall be applied one at a time in call order, so that concurrent calls never lose an update.
 
 === PARENT (specs/system.md) ===
-- **S1.1** [V1] When a member taps Book on a class with a free spot, the system shall reserve the spot and show a confirmation screen within 2 seconds.
+- **S4.1** [V1] When a member books a class, the system shall take one credit, and shall refuse the booking when the member has no credit.
+- **S4.2** [V2] When the studio cancels a booked class, the system shall return the credit to each booked member.
 
 === CONSTITUTION ===
 Requirements use EARS form. No promotional adjectives. Every requirement must be testable.
