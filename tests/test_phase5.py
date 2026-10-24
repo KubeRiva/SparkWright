@@ -489,6 +489,30 @@ class TestTestOnlyTasks(unittest.TestCase):
             self.assertNotIn("implement", log)
 
 
+class TestDogfoodFixes(unittest.TestCase):
+    def test_new_test_file_for_approved_task_is_not_drift(self):
+        with TempRepo() as r:
+            project(r)
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "tests/test_calc_extra.py", GOOD_TESTS)  # not in the task's declared files
+            b.submit("test-author", '{"status": "ok"}')
+            write(ws(b), "calc.py", CODE)
+            b.submit("builder", '{"status": "ok"}')
+            self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
+            git(r, "merge", "-q", "--no-ff", "sparkwright/C1.1.1.T1", "-m", "merge")
+            drift = [f.message for f in checks.run(r).findings if f.code == "drift.untracked-file"]
+            self.assertFalse([m for m in drift if "test_calc_extra" in m], drift)
+
+    def test_annotation_scan_ignores_ignored_dirs(self):
+        from sparkwright.core import annotations
+        with TempRepo() as r:
+            project(r)
+            write(r, ".venv-x/lib/tests/test_x.py", "# sparkwright: C1.1.1.T1\n")
+            write(r, ".gitignore", (r / ".gitignore").read_text() + ".venv-x/\n")
+            self.assertNotIn(".venv-x/lib/tests/test_x.py", annotations.test_files(r, ["tests/*", "**/test_*.py"]))
+
+
 class TestPhase5ReviewFixes(unittest.TestCase):
     """Regressions for the independent review of Phase 5 (specs/reviews/2026-10-24-phase5-review.md)."""
 

@@ -232,6 +232,9 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             for path in c.files:
                 if _glob_match(path, drift_exclude):
                     continue
+                cites_approved = any(derived.get(t) in APPROVED_LIKE for t in c.tasks)
+                if cites_approved and _glob_match(path, cfg["test_globs"]):
+                    continue  # tests written for an approved task under its trailer are tracked by that task
                 if not _glob_match(path, tracked_globs):
                     add("error" if mode == "required" else "warning", "drift.untracked-file",
                         f"commit {short} changes {path}, which no approved task declares", file=path)
