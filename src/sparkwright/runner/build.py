@@ -151,6 +151,9 @@ class Build:
         if not self.req.refs:
             raise BuildError(f"task {self.task} cites no parent")
         self.files = list(self.req.extras.get("files") or [])
+        # A test-only task guards behaviour that already exists: its tests must pass from the start (D005).
+        self.test_only = bool(self.files) and all(_match(f, list(self.cfg["test_globs"])) for f in self.files)
+        self.fixer = "test-author" if self.test_only else "builder"  # who fixes failed checks and review findings
         self._live_high_risk = str(self.repo.file_of[self.task].meta.get("risk", "")).strip().lower() == "high"
         if not self.files:
             raise BuildError(f"task {self.task} declares no `files`; add a yaml block with files: [...] (S1.8)")
@@ -469,7 +472,7 @@ class Build:
                 if st.rounds["builder"] > MAX_ROUNDS:
                     return self._block(f"{who} still reports high-severity findings after 2 rounds")
                 st.feedback = f"{who} high-severity findings:\n" + "\n".join(f"- {f.finding} Fix: {f.fix}" for f in high)
-                self._enter("builder")
+                self._enter(self.fixer)
             else:
                 st.feedback = ""
                 self._enter("security-reviewer" if step == "code-reviewer" and self.high_risk else "finish")
@@ -584,7 +587,12 @@ class Build:
                     py_compile.compile(str(ws / f), doraise=True)
                 except py_compile.PyCompileError as exc:
                     problem = f"Test file {f} does not compile: {exc.msg}"
-        if not problem:
+        if not problem and self.test_only:
+            res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
+            if not res.ok:
+                problem = ("This task only adds tests that guard behaviour the code already has, so the new tests must "
+                           "pass now. Output:\n" + res.output[-1500:])
+        elif not problem:
             res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
             if res.ok:
                 problem = "The new tests pass before any implementation exists, so they do not test the task."
@@ -600,6 +608,13 @@ class Build:
             st.feedback = problem
             self._enter("test-author")
             self._save("red check failed")
+            return
+        if self.test_only:
+            _commit(ws, self.task, "test-author", "tests (guard)", new_tests)
+            self.log.append("guard-check", status="done", tests=new_tests)
+            st.feedback = ""
+            self._enter("verify")  # no Builder: nothing to implement
+            self._save("guard tests pass and are committed")
             return
         st.red_commit = _commit(ws, self.task, "test-author", "tests (red)", new_tests)
         self.log.append("red-check", status="done", tests=new_tests)
@@ -679,7 +694,7 @@ class Build:
             self._block(f"{why} after {MAX_ROUNDS} builder rounds")
             return
         st.feedback = f"{why}:\n{output[-3000:]}"
-        self._enter("builder")
+        self._enter(self.fixer)
         self._save(why)
 
     def _step_verify(self) -> None:
@@ -755,6 +770,8 @@ class Build:
             return
         st.result["mutation_score"] = round(rep.score, 3)
         st.result["mutation_partial"] = rep.partial
+        st.result["mutation_total"] = rep.total
+        st.result["mutation_head"] = _git(Path(st.workspace), "rev-parse", "HEAD").strip()
         self._enter("lock-tests")
         self._save("saboteur passed")
 
@@ -818,7 +835,8 @@ class Build:
             problems.append("workspace has uncommitted changes")
         commits = self._role_commits()
         roles = [(subj.split(": ", 1)[-1], role) for _, subj, role in commits]
-        needed = [("tests (red)", "test-author"), ("implement", "builder"), ("lock tests", "runner"), ("code review", "runner")]
+        needed = ([("tests (guard)", "test-author")] if self.test_only else [("tests (red)", "test-author"), ("implement", "builder")]) \
+            + [("lock tests", "runner"), ("code review", "runner")]
         if self.req.extras.get("invariants"):
             needed.append(("property tests (red)", "property-tester"))
         if self.high_risk:
@@ -826,24 +844,52 @@ class Build:
         for need in needed:
             if need not in roles:
                 problems.append(f"missing '{need[0]}' commit by {need[1]}")
+        # Expensive parts are cached per branch tip, so an interrupted gate resumes instead of starting over.
+        head = _git(ws, "rev-parse", "HEAD").strip()
+        cache = st.result.get("gate_cache") if isinstance(st.result.get("gate_cache"), dict) else {}
+        if cache.get("head") != head:
+            cache = {"head": head}
+        st.result["gate_cache"] = cache
         red = next((sha for sha, subj, role in commits if subj.endswith(": tests (red)") and role == "test-author"), None)
+        if red and "red_fails" in cache:
+            if not cache["red_fails"]:
+                problems.append("the red tests do not fail at their own commit")
+            red = None
         if red:
             tmp = Path(tempfile.mkdtemp(prefix="sparkwright-red-"))
             try:
                 _git(self.root, "worktree", "add", "-q", "--detach", str(tmp / "w"), red)
-                if run_checks(tmp / "w", {"test": self.test_cmd}, env=self.env)[0].ok:
+                passed = run_checks(tmp / "w", {"test": self.test_cmd}, env=self.env)[0].ok
+                if passed:
                     problems.append("the red tests do not fail at their own commit")
+                cache["red_fails"] = not passed
+                self._save("gate: red check done")
             finally:
                 _git(self.root, "worktree", "remove", "--force", str(tmp / "w"), check=False)
                 shutil.rmtree(tmp, ignore_errors=True)
-        failed = [r.name for r in run_checks(ws, self.cfg.get("checks") or {}, env=self.env) if not r.ok]
+        if "failed_checks" not in cache:
+            cache["failed_checks"] = [r.name for r in run_checks(ws, self.cfg.get("checks") or {}, env=self.env) if not r.ok]
+            self._save("gate: checks done")
+        failed = cache["failed_checks"]
         if failed:
             problems.append(f"checks fail at the branch tip: {failed}")
         if self.prove and not self._prove_result(ws).ok:
             problems.append("the Prover fails at the branch tip (S5.6)")
-        rep, minimum = self._mutation()
-        if rep.total and rep.score < minimum:
-            problems.append(f"mutation score {rep.score:.2f} below {minimum:.2f} at the branch tip")
+        minimum = float((self.cfg.get("mutation") or {}).get("min", 0.8))
+        mhead = str(st.result.get("mutation_head") or "")
+        unchanged = re.fullmatch(r"[0-9a-f]{40,64}", mhead) and not [
+            f for f in _git(ws, "diff", "--name-only", mhead, "HEAD", "--").splitlines() if not f.startswith("specs/")]
+        if unchanged:  # only spec files (locks, reviews) changed since the Saboteur ran: its result still holds
+            score, total = float(st.result.get("mutation_score", 0)), int(st.result.get("mutation_total", 0) or 0)
+        elif "mutation" in cache:
+            score, total = cache["mutation"]
+        else:
+            rep, _ = self._mutation()
+            score, total = rep.score, rep.total
+            cache["mutation"] = [score, total]
+            self._save("gate: mutation done")
+        if total and score < minimum:
+            problems.append(f"mutation score {score:.2f} below {minimum:.2f} at the branch tip")
         locked = self._locked_at("HEAD")
         for f in [f for f in _git(ws, "diff", "--name-only", st.base, "HEAD").splitlines() if _match(f, self.test_globs)]:
             if (ws / f).is_file() and locked.get(f) != _blob_hash(ws, "HEAD", f):
@@ -851,7 +897,8 @@ class Build:
         if problems:
             self._block("Final gate failed: " + "; ".join(problems))
             return
-        st.result["mutation_score"] = round(rep.score, 3) if rep.total else None
+        st.result["mutation_score"] = round(score, 3) if total else None
+        st.result.pop("gate_cache", None)
         gate = f"Gate: red=confirmed checks=green mutation={st.result['mutation_score']}\n"
         _commit(ws, self.task, "runner", "ready", [], extra=gate, allow_empty=True)
         self._enter("ready")

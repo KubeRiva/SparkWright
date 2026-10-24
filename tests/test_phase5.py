@@ -456,6 +456,39 @@ class TestProver(unittest.TestCase):
             self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
 
 
+GUARD = ("# sparkwright: C1.1.1.T3\nimport unittest\nimport calc\n\nclass G(unittest.TestCase):\n"
+         "    def test_no_side_imports(self):\n        import sys\n        self.assertNotIn('numpy', sys.modules)\n")
+
+
+class TestTestOnlyTasks(unittest.TestCase):
+    def test_guard_task_needs_passing_tests_and_no_builder(self):
+        with TempRepo() as r:
+            multi_project(r)
+            p = r / "specs/components/C1.md"
+            p.write_text(p.read_text() + "\n- **C1.1.1.T4** [C1.1.1] Guard: calc imports no heavy modules.\n\n"
+                         "```yaml\nfiles: [\"tests/test_guard.py\"]\n```\n")
+            write(r, "calc.py", CODE)
+            commit(r, "guard task")
+            run_cli(r, "approve", "C1.1.1.T4", "--as", "Srikanth")
+            commit(r, "approve guard")
+            b = Build(r, "C1.1.1.T4")
+            self.assertTrue(b.test_only)
+            b.advance()
+            write(ws(b), "tests/test_guard.py", "# sparkwright: C1.1.1.T4\nimport unittest\n\nclass G(unittest.TestCase):\n"
+                  "    def test_fails(self):\n        self.fail('x')\n")
+            ins = b.submit("test-author", '{"status": "ok"}')
+            self.assertEqual(ins["step"], "test-author")
+            self.assertIn("must pass now", (r / ins["prompt"]).read_text())
+            write(ws(b), "tests/test_guard.py", GUARD.replace("C1.1.1.T3", "C1.1.1.T4"))
+            ins = b.submit("test-author", '{"status": "ok"}')
+            self.assertEqual(ins["step"], "code-reviewer", ins)  # no Builder step
+            ins = b.submit("code-reviewer", "[]")
+            self.assertEqual(ins["step"], "ready", ins)
+            log = git(ws(b), "log", "--format=%s")
+            self.assertIn("C1.1.1.T4: tests (guard)", log)
+            self.assertNotIn("implement", log)
+
+
 class TestPhase5ReviewFixes(unittest.TestCase):
     """Regressions for the independent review of Phase 5 (specs/reviews/2026-10-24-phase5-review.md)."""
 
