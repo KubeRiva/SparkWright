@@ -7,3 +7,4 @@ dist/
 .sparkwright/runs/
 .sparkwright/ledger.json
 .sparkwright/worktrees/
+lab/
