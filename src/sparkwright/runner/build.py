@@ -159,6 +159,10 @@ class Build:
         if not self.test_cmd:
             raise BuildError("set checks.test in .sparkwright/config.yaml so builds can run tests")
         self.env = command_env(self.cfg.get("env"), self.root)
+        self.prove = bool(self.req.extras.get("prove"))
+        if self.prove and not self.cfg.get("prove"):
+            raise BuildError(f"task {self.task} sets prove: true; set `prove:` in .sparkwright/config.yaml to the "
+                             "command that checks proofs, e.g. \"crosshair check {files}\" (S5.6)")
         self.run_no = self._latest_run_no()
         self._open_run()
 
@@ -246,6 +250,8 @@ class Build:
         parts = [f"=== TASK {self.task} ===\n- **{self.task}** [{', '.join(self.req.refs)}] {self.req.text}\n"
                  f"Declared files: {json.dumps(self.files)}\nInvariants: {json.dumps(self.req.extras.get('invariants', []))}\n"
                  f"Test paths you may write: {json.dumps(self.test_globs)}\n"
+                 + (f"Machine-checked proof required (S5.6): `{self.cfg.get('prove')}` must pass on your changed files.\n"
+                    if self.prove else "") +
                  f"Workspace (all paths are relative to it): {ws}"]
         parts.append(f"=== SPEC FILE ({sf.path}) ===\n" + _read(self.root / sf.path))
         seen, frontier = {sf.path}, list(self.req.refs)
@@ -684,8 +690,24 @@ class Build:
         if failed:
             self._builder_retry("Project checks failed", "\n\n".join(f"[{r.name}] {r.output}" for r in failed))
             return
-        self._enter("library")
+        self._enter("prove" if self.prove else "library")
         self._save("verify green")
+
+    def _prove_result(self, ws: Path):
+        changed = _git(ws, "diff", "--name-only", self.state.base, "HEAD").splitlines()
+        src = [f for f in changed if not _match(f, self.test_globs) and not f.startswith("specs/") and (ws / f).is_file()]
+        cmd = str(self.cfg["prove"]).replace("{files}", " ".join(f'"{f}"' for f in src))
+        return run_checks(ws, {"prove": cmd}, env=self.env)[0]
+
+    def _step_prove(self) -> None:
+        """S5.6: machine-checked proofs for `prove: true` tasks; failure goes back to the Builder."""
+        res = self._prove_result(Path(self.state.workspace))
+        self.log.append("prove", status="done", ok=res.ok, command=res.command)
+        if not res.ok:
+            self._builder_retry("The Prover could not verify the implementation", res.output)
+            return
+        self._enter("library")
+        self._save("proofs checked")
 
     def _step_library(self) -> None:
         ws = Path(self.state.workspace)
@@ -812,6 +834,8 @@ class Build:
         failed = [r.name for r in run_checks(ws, self.cfg.get("checks") or {}, env=self.env) if not r.ok]
         if failed:
             problems.append(f"checks fail at the branch tip: {failed}")
+        if self.prove and not self._prove_result(ws).ok:
+            problems.append("the Prover fails at the branch tip (S5.6)")
         rep, minimum = self._mutation()
         if rep.total and rep.score < minimum:
             problems.append(f"mutation score {rep.score:.2f} below {minimum:.2f} at the branch tip")

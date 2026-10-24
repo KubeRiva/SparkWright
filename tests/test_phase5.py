@@ -420,5 +420,40 @@ class TestCalibration(unittest.TestCase):
             self.assertEqual(out["data"]["stats"]["contradiction-hunter"]["catch_rate"], 0.0)
 
 
+PROVER = ("import sys\nfiles = sys.argv[1:]\nbad = [f for f in files if 'PROVED' not in open(f).read()]\n"
+          "print('unproved:', bad) if bad else None\nsys.exit(1 if bad or not files else 0)\n")
+
+
+class TestProver(unittest.TestCase):
+    # sparkwright: S5.6
+    def test_prove_task_needs_prover_config(self):
+        with TempRepo() as r:
+            project(r, extra_yaml="prove: true\n")
+            with self.assertRaises(BuildError) as ctx:
+                Build(r, "C1.1.1.T1")
+            self.assertIn("prove:", str(ctx.exception))
+
+    def test_failed_proof_goes_back_to_builder_and_blocks_gate(self):
+        with TempRepo() as r:
+            project(r, extra_yaml="prove: true\n")
+            write(r, "tools/prover.py", PROVER)
+            cfg = r / ".sparkwright/config.yaml"
+            cfg.write_text(cfg.read_text() + f'prove: "{PY} tools/prover.py {{files}}"\n')
+            commit(r, "configure prover")
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "tests/test_calc.py", GOOD_TESTS)
+            ins = b.submit("test-author", '{"status": "ok"}')
+            self.assertIn("Machine-checked proof required", (r / ins["prompt"]).read_text())
+            write(ws(b), "calc.py", CODE)
+            ins = b.submit("builder", '{"status": "ok"}')
+            self.assertEqual(ins["step"], "builder")
+            self.assertIn("unproved", (r / ins["prompt"]).read_text())
+            write(ws(b), "calc.py", "# PROVED by contract\n" + CODE)
+            ins = b.submit("builder", '{"status": "ok"}')
+            self.assertEqual(ins["step"], "code-reviewer", ins)
+            self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
+
+
 if __name__ == "__main__":
     unittest.main()

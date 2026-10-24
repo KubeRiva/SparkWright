@@ -15,6 +15,7 @@ DEFAULTS: dict = {
     "budgets": {"per_run_usd": 10.0, "per_level_usd": {}},
     "gates": {"component": "auto", "task": "auto"},
     "checks": {},
+    "prove": None,             # S5.6: command run for `prove: true` tasks; {files} = the task's changed source files
     "env": {},                 # extra environment for checks/builds; {repo} = main repository root
     "python": None,            # interpreter for the Library Checker (default: the one running sparkwright)
     "mutation": {"min": 0.8, "time_budget_s": 300},
