@@ -10,4 +10,5 @@ trailers: warn        # the project predates its own trailer rules; becomes `req
 approvers:
   - {name: Srikanth, email: kirankls@gmail.com}
 require_signed: false
+baseline: 3d67fa0bee569b8c9e77a2bc565a80b7c65f78b5
 mutation: {min: 0.8, time_budget_s: 300}
