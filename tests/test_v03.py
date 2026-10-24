@@ -110,6 +110,22 @@ class TestRenames(unittest.TestCase):
             self.assertEqual(res.nodes["C1.2.1.T1"].tests, ["tests/test_t.py"])
 
 
+class TestSpecOnlyCommits(unittest.TestCase):
+    # sparkwright: S2.3
+    def test_spec_only_commits_need_no_task_trailer(self):
+        with TempRepo() as r:
+            approver_repo(r)
+            commit(r, "config")
+            write(r, "specs/system.md", spec("SYSTEM", "system", "- **S1.1** [V1] The parser shall parse.\n- **S1.2** [V1] more\n"))
+            commit(r, "spec change")
+            write(r, ".sparkwright/config.yaml", (r / ".sparkwright/config.yaml").read_text().replace("trailers: off", "trailers: required"))
+            commit(r, "require trailers")
+            self.assertNotIn("commit.no-trailer", codes(checks.run(r)))
+            write(r, "src/x.py", "x = 1\n")
+            commit(r, "code without trailer")
+            self.assertIn("commit.no-trailer", codes(checks.run(r)))
+
+
 class TestCommitMessages(unittest.TestCase):
     # sparkwright: S9.2
     def test_agent_commits_must_list_changed_files(self):

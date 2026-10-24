@@ -204,14 +204,15 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
 
     # --- commits: trailers, drift, roles (S2.3, S2.6, S6.5) ---
     mode = cfg.get("trailers", "required")
+    drift_exclude = cfg.get("drift_exclude", DRIFT_EXCLUDE_DEFAULT)
     task_ids = {rid for rid, r in repo.requirements.items() if r.kind == "task"}
     tracked_globs = [g for rid in task_ids if derived[rid] in APPROVED_LIKE for g in nodes[rid].files]
-    drift_exclude = cfg.get("drift_exclude", DRIFT_EXCLUDE_DEFAULT)
     locked_tests = {aid[5:] for aid in latest if aid.startswith("test:")}
     for c in commits:
         short = c.sha[:12]
+        spec_only = bool(c.files) and all(_glob_match(f, drift_exclude) for f in c.files)
         if mode != "off":
-            if not c.tasks:
+            if not c.tasks and not spec_only:
                 add("error" if mode == "required" else "warning", "commit.no-trailer", f"commit {short} '{c.subject}' has no SparkWright-Task trailer")
             for t in c.tasks:
                 if t not in task_ids:
