@@ -16,9 +16,9 @@ class TestNeutralSkills(unittest.TestCase):
     # sparkwright: S8.3
     def test_skills_render_without_unfilled_slots(self):
         skills = load_skills()
-        self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build", "sparkwright-descend"})
+        self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build", "sparkwright-descend", "sparkwright-adopt"})
         for s in skills:
-            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z", run_architect="W", run_guide_agent="V"))
+            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z", run_architect="W", run_guide_agent="V", run_surveyor="U"))
 
 
 class TestClaudeCodeAdapter(unittest.TestCase):

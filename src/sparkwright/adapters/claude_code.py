@@ -18,7 +18,13 @@ from .neutral import load_skills
 PLUGIN = "sparkwright"
 REVIEW_PERSONAS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devils-advocate",
                    "buildability-checker", "security-reviewer", "code-reviewer", "theme-synthesizer", "architect",
-                   "guide-writer", "question-auditor"]
+                   "guide-writer", "question-auditor", "surveyor"]
+
+RUN_SURVEYOR = (
+    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-surveyor`, and ONLY this task "
+    "text: \"Read <absolute path of data.prompt> and follow it. Reply with only the JSON object.\" Write the agent's "
+    "reply verbatim to `data.result_file`."
+)
 
 RUN_GUIDE_AGENT = (
     "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.step>`, and ONLY this "
@@ -115,7 +121,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
         put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name], build=True))
         agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
     for skill in load_skills():
-        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT, run_guide_agent=RUN_GUIDE_AGENT)
+        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT, run_guide_agent=RUN_GUIDE_AGENT, run_surveyor=RUN_SURVEYOR)
         put(f"skills/{skill.name}/SKILL.md",
             f"---\nname: {skill.name}\ndescription: {skill.description}\n---\n\n{body.strip()}\n")
     manifest = {

@@ -28,7 +28,8 @@ def section() -> str:
         lines.append(s.render(run_agents=RUN_AGENTS, run_build_agent="run `sparkwright build <task-id>` without --next instead: the Runner performs agent steps with the configured models.",
                               run_synthesizer="run `sparkwright interview ingest <file> --consent ...` without --prepare instead: the Runner calls the Theme Synthesizer model.",
                               run_architect="run `sparkwright descend <ID>` without --prepare instead: the Runner calls the Architect model.",
-                              run_guide_agent="run `sparkwright interview guide --about ...` without --prepare instead: the Runner calls both models.").strip())
+                              run_guide_agent="run `sparkwright interview guide --about ...` without --prepare instead: the Runner calls both models.",
+                              run_surveyor="run `sparkwright adopt` without --prepare instead: the Runner calls the Surveyor model.").strip())
         lines.append("")
     lines.append(END)
     return "\n".join(lines) + "\n"

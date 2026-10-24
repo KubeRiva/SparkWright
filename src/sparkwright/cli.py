@@ -391,6 +391,32 @@ def cmd_interview(args) -> int:
     return _emit(args, "interview", True, {"path": str(res.path.relative_to(root)), "saturated": res.saturated}, msg)
 
 
+def cmd_adopt(args) -> int:
+    from .runner import adopt as ad
+    root = Path(args.root).resolve()
+    try:
+        if not (root / ".sparkwright" / "config.yaml").exists():
+            raise ad.AdoptError("run `sparkwright init` first")
+        if args.collect:
+            data = ad.collect(root, args.collect)
+        elif args.prepare:
+            data = ad.prepare(root, args.path or None)
+            return _emit(args, "adopt", True, data,
+                         f"Run a fresh Surveyor agent on {data['prompt']}, save its reply to {data['result_file']}, "
+                         f"then run: {data['then']}")
+        else:
+            data = ad.run(root, _router(args, root), args.path or None)
+    except (ad.AdoptError, ProviderError, RoleFailed, OSError) as exc:
+        return _emit(args, "adopt", False, {"error": str(exc)}, f"Stopped: {exc}")
+    msg = "Drafted (all status: draft): " + ", ".join(data["files"])
+    if data["baseline"]:
+        msg += f"\nBaseline recorded: {data['baseline'][:12]} (checks apply to commits after it)."
+    if data["warnings"]:
+        msg += "\nWarnings:\n" + "\n".join(f"- {w}" for w in data["warnings"])
+    msg += f"\nNext: correct the drafts, interview the owner, then {data['next']}."
+    return _emit(args, "adopt", True, data, msg)
+
+
 def cmd_descend(args) -> int:
     from .runner import descend as ds
     root = Path(args.root).resolve()
@@ -646,6 +672,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--simulated", action="store_true", help="mark evidence as simulated (never counts as evidence)")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_interview)
+    sp = common(sub.add_parser("adopt", help="Surveyor drafts System, Component and Task specs from an existing codebase"))
+    sp.add_argument("--path", action="append", help="only survey this directory (repeatable)")
+    sp.add_argument("--prepare", action="store_true", help="host-agent mode: write the Surveyor prompt")
+    sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: write the drafts from the Surveyor's reply")
+    sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(func=cmd_adopt)
     sp = common(sub.add_parser("descend", help="Architect drafts the next spec level under an approved requirement"))
     sp.add_argument("id", nargs="?", help="approved system or component requirement ID, e.g. S1.2 or C1.2.1")
     sp.add_argument("--prepare", action="store_true", help="host-agent mode: write the Architect prompt")

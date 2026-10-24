@@ -244,5 +244,99 @@ class TestInterviewGuide(unittest.TestCase):
             self.assertEqual([c[0] for c in fake.calls], ["guide-writer", "question-auditor"])
 
 
+CART = ('''"""Shopping cart."""
+
+
+class Cart:
+    """Holds line items."""
+
+    def add(self, sku, qty):
+        """Add qty of sku."""
+
+    def total(self):
+        """Sum of line prices."""
+''')
+SURVEY = {
+    "purpose": "Let shoppers collect items and see a total.",
+    "system": [{"title": "Cart", "requirements": ["When a shopper adds items, the system shall keep them in a cart.",
+                                                  "When asked, the system shall report the cart total."]}],
+    "components": [{"title": "Cart module", "responsibility": "Line items and totals.",
+                    "requirements": [
+                        {"system": [1, 1], "text": "When add(sku, qty) is called, the cart shall record the line.",
+                         "files": ["shop/cart.py"]},
+                        {"system": [1, 2], "text": "When total() is called, the cart shall return the sum.",
+                         "files": ["shop/cart.py", "nowhere/**"]},
+                        {"system": [9, 9], "text": "Invented.", "files": ["shop/cart.py"]}]}],
+}
+
+
+def code_repo(r: Path) -> None:
+    write(r, "shop/__init__.py", "")
+    write(r, "shop/cart.py", CART)
+    write(r, "tests/test_cart.py", "import unittest\n")
+    git_init(r)
+    commit(r, "existing code")
+    run_cli(r, "init")
+    commit(r, "init sparkwright")
+
+
+class TestAdopt(unittest.TestCase):
+    # sparkwright: S2.7
+    def test_host_flow_drafts_bottom_up_specs(self):
+        with TempRepo() as r:
+            code_repo(r)
+            code, out = run_cli(r, "adopt", "--prepare")
+            self.assertEqual(code, 0, out)
+            prompt = (r / out["data"]["prompt"]).read_text()
+            self.assertIn("class Cart (methods: add, total) — Holds line items.", prompt)
+            self.assertNotIn("specs/", prompt.split("=== CODE INVENTORY ===")[1])
+            (r / out["data"]["result_file"]).write_text(json.dumps(SURVEY))
+            head = git(r, "rev-parse", "HEAD")
+            code, out = run_cli(r, "adopt", "--collect", out["data"]["run_id"])
+            self.assertEqual(code, 0, out)
+            d = out["data"]
+            self.assertIn("specs/components/C1-cart-module.md", d["files"])
+            self.assertTrue(any("nowhere" in w for w in d["warnings"]))
+            self.assertTrue(any("valid system reference" in w for w in d["warnings"]))
+            comp = (r / "specs/components/C1-cart-module.md").read_text()
+            self.assertIn("- **C1.1.1** [S1.1]", comp)
+            self.assertIn("- **C1.2.1** [S1.2]", comp)
+            self.assertIn("- **C1.1.1.T1** [C1.1.1]", comp)
+            self.assertIn("status: draft", comp)
+            self.assertIn("[A1]", (r / "specs/vision.md").read_text())
+            # init already recorded the commit before SparkWright as the baseline; adopt keeps it
+            self.assertIsNone(d["baseline"])
+            self.assertRegex((r / ".sparkwright/config.yaml").read_text(), r"baseline: [0-9a-f]{40}")
+            del head
+            res = checks.run(r)
+            self.assertFalse([f for f in res.findings if f.code.startswith(("grammar.", "frontmatter."))],
+                             [f.code for f in res.findings])
+            self.assertEqual(res.nodes["C1.1.1.T1"].status, "draft")
+
+    def test_baseline_recorded_when_missing(self):
+        from sparkwright.runner import adopt
+        with TempRepo() as r:
+            write(r, ".sparkwright/config.yaml", "checks: {}\nbaseline: null   # note\n")
+            self.assertTrue(adopt._set_baseline(r, "a" * 40))
+            self.assertIn("baseline: " + "a" * 40, (r / ".sparkwright/config.yaml").read_text())
+            self.assertFalse(adopt._set_baseline(r, "b" * 40))  # never overwrites an existing baseline
+
+    def test_refuses_when_specs_exist(self):
+        with TempRepo() as r:
+            project(r)
+            code, out = run_cli(r, "adopt", "--prepare")
+            self.assertEqual(code, 1)
+            self.assertIn("already has content", out["data"]["error"])
+
+    def test_runner_mode(self):
+        from sparkwright.runner import adopt
+        with TempRepo() as r:
+            code_repo(r)
+            fake = FakeProvider(script={"surveyor": ["```json\n" + json.dumps(SURVEY) + "\n```"]})
+            router = Router({"roles": {}, "budgets": {}, "models": {}}, {"fast": fake, "mid": fake, "top": fake})
+            out = adopt.run(r, router, ["shop"])
+            self.assertIn("specs/system.md", out["files"])
+
+
 if __name__ == "__main__":
     unittest.main()

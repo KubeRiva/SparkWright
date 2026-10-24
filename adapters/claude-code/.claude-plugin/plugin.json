@@ -19,6 +19,7 @@
     "./agents/sparkwright-architect.md",
     "./agents/sparkwright-guide-writer.md",
     "./agents/sparkwright-question-auditor.md",
+    "./agents/sparkwright-surveyor.md",
     "./agents/sparkwright-test-author.md",
     "./agents/sparkwright-property-tester.md",
     "./agents/sparkwright-builder.md"
