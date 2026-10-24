@@ -219,7 +219,7 @@ Example with two refs and a continuation line:
 | MVP 1: offline core | S1.1–S1.4, S1.6, S1.8, S2.1–S2.4, S2.6, S2.8, S2.9, S6.3, S6.5, S6.6, S6.8, S6.9, S9.1, S11.1–S11.7 |
 | MVP 2: agents | S3.1, S3.2, S3.7, S4.1–S4.5, S6.1, S6.7, S7.1, S7.3–S7.6, S8.1–S8.4, S9.3 |
 | Phase 3: build loop | S1.5, S1.7, S2.5, S3.3–S3.6, S3.8–S3.10, S5.1–S5.5, S6.2, S6.4, S9.2 |
-| Later | S2.7, S5.6, S7.2, S7.7, S10.1–S10.3 |
+| Phase 5: adoption and measurement | S2.7, S5.6, S7.2, S7.7, S10.1–S10.3 |
 
 ## Data model
 

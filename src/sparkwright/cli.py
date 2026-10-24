@@ -191,7 +191,24 @@ def cmd_approve(args) -> int:
     derived = {k: n.status for k, n in checks.run(root, write_ledger=False).nodes.items()}
     from .core import events as events_mod
     evs, _ = events_mod.read(root)
-    blocked, unreviewed = [], []
+    cr_target = None
+    if args.cr:
+        cr_sf = next((f for f in repo.files if f.id == args.cr), None)
+        cr_target = ids.canonical(str((cr_sf.meta if cr_sf else {}).get("target", "")))
+
+    def ancestors(rid: str) -> set[str]:
+        seen, stack = set(), list(repo.requirements[rid].refs) if rid in repo.requirements else []
+        while stack:
+            a = stack.pop()
+            if a not in seen:
+                seen.add(a)
+                stack.extend(repo.requirements[a].refs if a in repo.requirements else [])
+        return seen
+
+    def last_applied(rid: str) -> str | None:
+        return max((e.time for e in evs if e.id == rid and e.event == "cr-applied"), default=None)
+
+    blocked, unreviewed, refused = [], [], []
     for r in reqs:
         prev = latest.get(r.id)
         risk = approvals.risk_of(repo, r.id)
@@ -201,12 +218,25 @@ def cmd_approve(args) -> int:
         if prev and (prev.hash != r.hash or changed_like) and not args.cr:
             blocked.append(r.id)
             continue
-        if args.cr:  # S3.10: the CR's target must pass a review of its new text before re-approval
-            applied = [e.time for e in evs if e.id == r.id and e.event == "cr-applied" and (e.reason or "") == args.cr]
-            if applied and not events_mod.reviewed_since(evs, r.id, r.hash, max(applied)):
+        if args.cr and prev:  # S3.10: a change request re-approves its target only after a review, then its descendants
+            if r.id != cr_target and cr_target not in ancestors(r.id):
+                refused.append(f"{r.id} is not {cr_target} or below it, so {args.cr} does not cover it")
+                continue
+            if r.id == cr_target and not any(e.id == r.id and e.event == "cr-applied" and e.reason == args.cr for e in evs):
+                refused.append(f"apply {args.cr} first (`sparkwright change apply {args.cr}`)")
+                continue
+            applied = last_applied(r.id)
+            if applied and not events_mod.reviewed_since(evs, r.id, r.hash, applied):
                 unreviewed.append(r.id)
                 continue
+            if r.id != cr_target:
+                t_appr, t_applied = latest.get(cr_target), last_applied(cr_target)
+                if derived.get(cr_target) != "approved" or (t_applied and (not t_appr or t_appr.time < t_applied)):
+                    refused.append(f"{r.id}: re-approve the change request's target {cr_target} first (S3.10)")
+                    continue
         entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk))
+    if refused:
+        return _emit(args, "approve", False, {"refused": refused}, "Refusing: " + "; ".join(refused))
     if unreviewed:
         return _emit(args, "approve", False, {"needs_review": unreviewed},
                      "Refusing: review the changed text first (S3.10): "
@@ -263,9 +293,24 @@ def cmd_init(args) -> int:
     if missing:
         with gi.open("a", encoding="utf-8") as fh:
             fh.write(("\n" if existing and existing[-1] else "") + "\n".join(missing) + "\n")
+    ensure_union_merge(root)
     return _emit(args, "init", True, {"created": created},
                  "Initialised SparkWright.\n" + "\n".join(f"  created {c}" for c in created))
 
+
+
+UNION_LOGS = ["specs/approvals.jsonl merge=union", "specs/events.jsonl merge=union"]
+
+
+def ensure_union_merge(root: Path) -> bool:
+    """S3.8: parallel build branches each append to the logs; a union merge keeps every line without conflicts."""
+    ga = root / ".gitattributes"
+    existing = ga.read_text(encoding="utf-8").splitlines() if ga.exists() else []
+    missing = [w for w in UNION_LOGS if w not in existing]
+    if missing:
+        with ga.open("a", encoding="utf-8") as fh:
+            fh.write(("\n" if existing and existing[-1] else "") + "\n".join(missing) + "\n")
+    return bool(missing)
 
 
 # ---------------------------------------------------------------- runner commands

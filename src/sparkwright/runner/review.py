@@ -21,6 +21,22 @@ DEFAULT_PERSONAS: dict[str, list[str]] = {
 HUMAN_GATED = {"evidence", "vision", "system"}
 
 
+NON_INSPECTORS = {"code-reviewer", "question-auditor"}  # findings-producing roles that do not review specs
+
+
+def inspector_names(root: Path | str | None = None) -> set[str]:
+    return {n for n, p in load_all(root).items() if p.output == "findings" and n not in NON_INSPECTORS}
+
+
+def _validated(names: list[str], root: Path) -> list[str]:
+    """Distinct Inspector names in order (S6.1: a persona listed twice is still one Inspector)."""
+    out = list(dict.fromkeys(names))
+    bad = [n for n in out if n not in inspector_names(root)]
+    if bad:
+        raise ReviewError(f"not Inspector personas: {bad}")
+    return out
+
+
 def default_personas(level: str, cfg: dict | None = None) -> list[str]:
     """Default Inspectors for a level minus any a human disabled after calibration; never fewer than MIN_PERSONAS."""
     names = list(DEFAULT_PERSONAS.get(level, DEFAULT_PERSONAS["system"]))
@@ -247,11 +263,8 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
     repo = store.load(root)
     sf = _resolve(repo, target)
     level = str(sf.meta.get("type", "system"))
-    names = list(persona_names or default_personas(level, router.config))
+    names = _validated(list(persona_names or default_personas(level, router.config)), root)
     all_personas = load_all(root)
-    missing = [n for n in names if n not in all_personas]
-    if missing:
-        raise ReviewError(f"unknown personas: {missing}")
 
     context, included = build_context(root, repo, sf)
     hits, mentions = scan_injection(context)
@@ -360,10 +373,7 @@ def prepare(root: Path | str, target: str, persona_names: list[str] | None = Non
     sf = _resolve(repo, target)
     level = str(sf.meta.get("type", "system"))
     from ..core import config as config_mod
-    names = list(persona_names or default_personas(level, config_mod.load(root)[0]))
-    unknown = [n for n in names if n not in load_all(root)]
-    if unknown:
-        raise ReviewError(f"unknown personas: {unknown}")
+    names = _validated(list(persona_names or default_personas(level, config_mod.load(root)[0])), root)
     context, included = build_context(root, repo, sf)
     hits, mentions = scan_injection(context)
     high_risk = str(sf.meta.get("risk", "")).lower() == "high"
@@ -391,13 +401,21 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
     if start is None:
         raise ReviewError(f"no prepared review run {run_id}")
     run_dir = log.path.with_suffix("")
+    if any(r.get("step") == "foreman" for r in recs):
+        raise ReviewError(f"review run {run_id} was already collected; prepare a new review")
     # The run log is not trusted: risk, level and the injection scan are recomputed from the spec (S6.2, S6.7).
     repo = store.load(root)
     sf = _resolve(repo, str(start.get("target", "")))
     target, level = sf.id or str(start["target"]), str(sf.meta.get("type", "system"))
-    hits, mentions = scan_injection(build_context(root, repo, sf)[0])
+    context = build_context(root, repo, sf)[0]
+    saved = run_dir / "context.md"
+    if not saved.is_file() or saved.read_text(encoding="utf-8") != context:
+        raise ReviewError("the artifact or its parents changed since this review was prepared; prepare a new review "
+                          "so the Inspectors see the current text (S3.10)")
+    hits, mentions = scan_injection(context)
     high_risk = str(sf.meta.get("risk", "")).lower() == "high"
-    names = [n for n in start.get("personas", []) if isinstance(n, str) and re.fullmatch(r"[a-z0-9-]+", n)]
+    inspectors = inspector_names(root)
+    names = list(dict.fromkeys(n for n in start.get("personas", []) if isinstance(n, str) and n in inspectors))
     if (hits or mentions or high_risk) and "security-reviewer" not in names:
         names.insert(0, "security-reviewer")
     per_persona: dict[str, list[Finding]] = {}

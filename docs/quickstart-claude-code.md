@@ -26,9 +26,10 @@ claude plugin marketplace add D:\SparkWright
 claude plugin install sparkwright@sparkwright
 ```
 
-This adds six skills (`sparkwright-interview`, `sparkwright-review`,
-`sparkwright-descend`, `sparkwright-build`, `sparkwright-check`,
-`sparkwright-mutate`), the fresh-context agents they use, and the guard hook.
+This adds eight skills (`sparkwright-interview`, `sparkwright-review`,
+`sparkwright-descend`, `sparkwright-build`, `sparkwright-adopt`,
+`sparkwright-calibrate`, `sparkwright-check`, `sparkwright-mutate`), the
+fresh-context agents they use, and the guard hook.
 
 If you installed the plugin before, update it after pulling SparkWright
 changes: `claude plugin marketplace update sparkwright` then
@@ -73,11 +74,15 @@ Remaining tasks, in a sensible order:
 
 | Step | In Claude Code, ask… | Or run |
 | --- | --- | --- |
+| Existing code, no specs | "Adopt this codebase with the sparkwright-adopt skill" | `sparkwright adopt --prepare` |
 | Evidence | "Interview me with the sparkwright-interview skill" | `sparkwright interview owner --host --consent "..."` |
+| Real-user interviews | "Write an interview guide for parents of kids learning chess" | `sparkwright interview guide --about "..." --minors --prepare` |
 | Vision / System | write them with Claude, then "Review VISION with the sparkwright-review skill" | `sparkwright review VISION --prepare` |
 | Component / Tasks | "Descend S2.1 with the sparkwright-descend skill", then review the draft | `sparkwright descend S2.1 --prepare` |
 | Approve (you, never an agent) | — | `sparkwright approve SYSTEM --as Srikanth` then commit |
 | Build | "Build task C2.1.1.T1 with the sparkwright-build skill" | `sparkwright build C2.1.1.T1 --next` |
+| Several tasks | "Plan builds for C2.1.1.T1 C2.1.2.T1 C2.2.1.T1" | `sparkwright build C2.1.1.T1 C2.1.2.T1 C2.2.1.T1 --plan` |
+| Reviewer quality | "Calibrate the reviewers" | `sparkwright calibrate --prepare` |
 | Check traceability | "Run sparkwright check and trace V1" | `sparkwright trace V1` |
 | Change a spec | "Open a change request for C1.2.1" | `sparkwright change new C1.2.1 --reason "..."` |
 
@@ -91,5 +96,6 @@ Approvals count only when **you** commit them with the git email listed under
 | `sparkwright: command not found` inside Claude Code | run `uv tool update-shell`, restart the terminal and Claude Code |
 | Build stops with "commit or stash spec and config changes" | commit your spec edits first; builds start from committed specs |
 | Build is `blocked` | read the reason in `sparkwright build <task> --next`; fix the spec or code, then `sparkwright build <task> --restart --next` |
-| Build is `changed` | the agent found a spec defect: edit the change request in `specs/changes/`, approve it, `sparkwright change apply CR<n>`, re-approve the requirement with `--cr CR<n>` |
+| Build is `changed` | the agent found a spec defect: edit the change request in `specs/changes/`, approve it, `sparkwright change apply CR<n>`, edit the requirement, review its file, then re-approve with `--cr CR<n>` (approval is refused until a review saw the new text) |
+| "task X is building … may overlap" | another build touches the same files; merge it, or `sparkwright build X --abandon` |
 | Tests are slow in every build | make sure `env: UV_PROJECT_ENVIRONMENT` is set in `.sparkwright/config.yaml` |

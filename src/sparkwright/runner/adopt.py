@@ -150,11 +150,13 @@ def _front(meta: dict) -> str:
 
 
 def _set_baseline(root: Path, head: str) -> bool:
+    if not re.fullmatch(r"[0-9a-f]{40,64}", str(head)):
+        raise AdoptError("invalid baseline commit in the run log")
     cfg = root / ".sparkwright" / "config.yaml"
     text = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
     if re.search(r"^baseline:\s*(null|~)?\s*(#.*)?$", text, re.M):
-        cfg.write_text(re.sub(r"^baseline:\s*(null|~)?\s*(#.*)?$", f"baseline: {head}  # recorded by adopt", text,
-                              count=1, flags=re.M), encoding="utf-8")
+        cfg.write_text(re.sub(r"^baseline:\s*(null|~)?\s*(#.*)?$", lambda _m: f"baseline: {head}  # recorded by adopt",
+                              text, count=1, flags=re.M), encoding="utf-8")
         return True
     if not re.search(r"^baseline:", text, re.M):
         cfg.parent.mkdir(parents=True, exist_ok=True)

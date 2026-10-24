@@ -370,7 +370,8 @@ class TestCalibration(unittest.TestCase):
                 elif case.clean:
                     out = []
                 else:
-                    out = [{"severity": "high", "ids": case.ids, "finding": " ".join(case.keywords[:1]), "fix": "x"}]
+                    word = next(k for k in case.keywords if not cb.ID_LIKE.match(k))
+                    out = [{"severity": "high", "ids": case.ids, "finding": word, "fix": "x"}]
                 self.calls.append((persona, model))
                 return json.dumps(out), Usage(10, 10)
 
@@ -453,6 +454,125 @@ class TestProver(unittest.TestCase):
             ins = b.submit("builder", '{"status": "ok"}')
             self.assertEqual(ins["step"], "code-reviewer", ins)
             self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
+
+
+class TestPhase5ReviewFixes(unittest.TestCase):
+    """Regressions for the independent review of Phase 5 (specs/reviews/2026-10-24-phase5-review.md)."""
+
+    def _cr_applied(self, r):
+        project(r)
+        run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+        run_cli(r, "approve", "C1", "--as", "Srikanth")
+        run_cli(r, "change", "new", "C1.1.1", "--reason", "x")
+        run_cli(r, "approve", "CR1", "--as", "Srikanth")
+        run_cli(r, "change", "new", "C1.1.1.T1", "--reason", "y")
+        run_cli(r, "approve", "CR2", "--as", "Srikanth")
+        run_cli(r, "change", "apply", "CR1")
+        p = r / "specs/components/C1.md"
+        p.write_text(p.read_text().replace("limited to [lo, hi].", "limited to [lo, hi]; lo > hi raises ValueError."))
+
+    def test_h1_other_cr_cannot_skip_review(self):
+        with TempRepo() as r:
+            self._cr_applied(r)
+            code, out = run_cli(r, "approve", "C1.1.1", "--as", "Srikanth", "--cr", "CR2")
+            self.assertEqual(code, 1, out)
+
+    def test_h2_descendant_waits_for_target(self):
+        with TempRepo() as r:
+            self._cr_applied(r)
+            code, out = run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 1, out)
+            self.assertIn("C1.1.1 first", " ".join(out["data"]["refused"]))
+            host_review(r, "C1")
+            self.assertEqual(run_cli(r, "approve", "C1.1.1", "--as", "Srikanth", "--cr", "CR1")[0], 0)
+            code, out = run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 0, out)
+
+    def test_h3_stale_or_repeated_collect_refused(self):
+        with TempRepo() as r:
+            project(r)
+            prep = review.prepare(r, "C1")
+            for name in prep.personas:
+                (prep.run_dir / f"{name}.json").write_text("[]")
+            p = r / "specs/components/C1.md"
+            p.write_text(p.read_text().replace("limited to", "clamped to"))
+            with self.assertRaises(review.ReviewError):
+                review.collect(r, prep.run_id, {"gates": {}})
+            p.write_text(p.read_text().replace("clamped to", "limited to"))
+            review.collect(r, prep.run_id, {"gates": {}})
+            with self.assertRaises(review.ReviewError):
+                review.collect(r, prep.run_id, {"gates": {}})
+
+    def test_h4_duplicate_or_non_inspector_personas(self):
+        with TempRepo() as r:
+            project(r)
+            with self.assertRaises(review.ReviewError):
+                review.prepare(r, "C1", ["surveyor", "newcomer"])
+            prep = review.prepare(r, "C1", ["newcomer", "newcomer"])
+            self.assertEqual(prep.personas, ["newcomer"])
+            (prep.run_dir / "newcomer.json").write_text("[]")
+            self.assertTrue(review.collect(r, prep.run_id, {"gates": {}}).gate.startswith("FAIL"))
+
+    def test_m1_forged_run_log_never_reaches_git(self):
+        with TempRepo() as r:
+            multi_project(r)
+            target = r.parent / "victim.txt"
+            target.write_text("keep me")
+            write(r, ".sparkwright/runs/build-C1.1.1.T2.jsonl", json.dumps(
+                {"step": "state", "state": {"phase": "builder", "base": f"--output={target}", "branch": "HEAD"}}) + "\n")
+            self.assertEqual(parallel.active_builds(r), [])
+            self.assertEqual(target.read_text(), "keep me")
+
+    def test_m2_prover_refuses_odd_file_names(self):
+        with TempRepo() as r:
+            project(r, extra_yaml="prove: true\n")
+            cfg = r / ".sparkwright/config.yaml"
+            cfg.write_text(cfg.read_text() + 'prove: "echo {files}"\n')
+            commit(r, "prover")
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "calc.py", "x = 1\n")
+            git(ws(b), "add", "-A")
+            git(ws(b), "commit", "-qm", "x")
+            self.assertTrue(b._prove_result(ws(b)).ok)
+            write(ws(b), "calc$(touch pwned).py", "x = 1\n")
+            git(ws(b), "add", "-A")
+            git(ws(b), "commit", "-qm", "y")
+            res = b._prove_result(ws(b))
+            self.assertFalse(res.ok)
+            self.assertIn("will not pass", res.output)
+
+    def test_m3_init_sets_union_merge_for_logs(self):
+        with TempRepo() as r:
+            git_init(r)
+            run_cli(r, "init")
+            self.assertIn("specs/approvals.jsonl merge=union", (r / ".gitattributes").read_text())
+
+    def test_m4_baseline_must_be_a_hash(self):
+        from sparkwright.runner import adopt
+        with TempRepo() as r:
+            write(r, ".sparkwright/config.yaml", "baseline: null\n")
+            with self.assertRaises(adopt.AdoptError):
+                adopt._set_baseline(r, "abc\napprovers: []")
+
+    def test_m5_id_only_findings_are_not_catches(self):
+        from sparkwright.runner import calibrate as cb
+        from sparkwright.runner.review import Finding
+        case = next(c for c in cb.load_cases() if c.id == "cov-02")
+        self.assertFalse(cb.caught(case, [Finding("medium", ["S1.3"], "S1.3 could be clearer", "x", [])]))
+        self.assertTrue(cb.caught(case, [Finding("medium", ["S1.3"], "S1.3 adds loyalty points no Vision line asks for", "x", [])]))
+        stats = cb.score([case], {("cov-02", "coverage-auditor"): None})
+        self.assertEqual(stats["coverage-auditor"]["cases"], 0)  # missing replies are not misses
+
+    def test_l2_minors_check_judges_the_draft(self):
+        from sparkwright.runner import guide
+        with TempRepo() as r:
+            project(r)
+            prep = guide.prepare(r, "kids aged 8-12")
+            draft = GOOD_GUIDE.replace("parents help children", "children").replace("Parents of children", "Children")
+            guide.advance(r, prep["run_id"], writer_reply=draft)
+            out = guide.advance(r, prep["run_id"], auditor_reply="[]")
+            self.assertGreaterEqual(out["high"], 1)
 
 
 if __name__ == "__main__":

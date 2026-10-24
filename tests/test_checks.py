@@ -94,9 +94,17 @@ class TestApprovals(unittest.TestCase):
             self.assertEqual(out["data"]["needs_change_request"], ["S1.1"])
             code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR999")
             self.assertEqual(code, 1, "an unknown change request must be refused")
-            write(r, "specs/changes/CR1.md", "---\nid: CR1\ntitle: faster parsing\ntype: change\nstatus: approved\n---\n")
-            code, _ = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
-            self.assertEqual(code, 0)
+            write(r, "specs/changes/CR1.md", "---\nid: CR1\ntitle: faster parsing\ntype: change\nstatus: approved\n"
+                  "target: S1.1\n---\n")
+            code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 1, "the change request must be applied first")
+            self.assertEqual(run_cli(r, "change", "apply", "CR1")[0], 0)
+            code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(out["data"].get("needs_review"), ["S1.1"], "S3.10: review before re-approval")
+            from test_phase5 import host_review
+            host_review(r, "SYSTEM")
+            code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 0, out)
             self.assertTrue(checks.run(r).ok)
 
     def test_forged_status_is_caught(self):

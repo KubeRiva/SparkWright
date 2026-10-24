@@ -696,6 +696,11 @@ class Build:
     def _prove_result(self, ws: Path):
         changed = _git(ws, "diff", "--name-only", self.state.base, "HEAD").splitlines()
         src = [f for f in changed if not _match(f, self.test_globs) and not f.startswith("specs/") and (ws / f).is_file()]
+        bad = [f for f in src if f.startswith("-") or not re.fullmatch(r"[\w./ -]+", f)]
+        if bad or not src:
+            from .verify import CheckResult
+            why = f"file names the Prover will not pass to a command: {bad}" if bad else "no changed source files to prove"
+            return CheckResult("prove", str(self.cfg["prove"]), False, why)
         cmd = str(self.cfg["prove"]).replace("{files}", " ".join(f'"{f}"' for f in src))
         return run_checks(ws, {"prove": cmd}, env=self.env)[0]
 

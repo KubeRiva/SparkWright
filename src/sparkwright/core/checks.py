@@ -10,7 +10,7 @@ from . import annotations, approvals as approvals_mod, config as config_mod, eve
 
 APPROVED_LIKE = {"approved", "building", "done"}
 RUNNER_PATHS = ["specs/approvals.jsonl", "specs/events.jsonl", "specs/reviews/*"]
-DRIFT_EXCLUDE_DEFAULT = ["specs/**", ".sparkwright/**", "*.md", ".gitignore", "LICENSE", "NOTICE", "personas/**", "templates/**"]
+DRIFT_EXCLUDE_DEFAULT = ["specs/**", ".sparkwright/**", "*.md", ".gitignore", ".gitattributes", "LICENSE", "NOTICE", "personas/**", "templates/**"]
 
 
 @dataclass

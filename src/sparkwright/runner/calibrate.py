@@ -60,14 +60,19 @@ def load_cases(root: Path | None = None) -> list[Case]:
     return list(out.values())
 
 
+ID_LIKE = re.compile(r"^[A-Z]+\d+(\.\d+)*(\.T\d+)?$")
+
+
 def caught(case: Case, findings: list[Finding]) -> bool:
+    """A catch names the flaw (a keyword that is not just an ID) and, when the case has IDs, points at one of them."""
+    words = [k.lower() for k in case.keywords if not ID_LIKE.match(k)]
     for f in findings:
         if f.severity not in ("high", "medium"):
             continue
-        if set(f.ids) & set(case.ids):
-            return True
         text = f"{f.finding} {f.fix}".lower()
-        if any(re.search(r"\b" + re.escape(k.lower()), text) for k in case.keywords):
+        if not any(re.search(r"\b" + re.escape(k), text) for k in words):
+            continue
+        if not case.ids or set(f.ids) & set(case.ids) or any(i.lower() in text for i in case.ids):
             return True
     return False
 
@@ -84,12 +89,12 @@ def score(cases: list[Case], results: dict[tuple[str, str], list[Finding] | None
         s = stats.setdefault(persona, {"cases": 0, "caught": 0, "clean": 0, "false_alarms": 0, "unparseable": 0,
                                        "missed": []})
         case = by_id[cid]
-        if findings is None:
+        if findings is None:  # missing or unparseable reply: reported, but not scored either way
             s["unparseable"] += 1
-            findings = []
+            continue
         if case.clean:
             s["clean"] += 1
-            if any(f.severity == "high" for f in findings):
+            if any(f.severity in ("high", "medium") for f in findings):
                 s["false_alarms"] += 1
         elif persona in case.expect:
             s["cases"] += 1
@@ -120,19 +125,23 @@ def write_report(root: Path, tier_stats: dict[str, dict[str, dict]], cfg: dict, 
     min_catch = float((cfg.get("calibration") or {}).get("min_catch_rate", 0.5))
     disabled = list((cfg.get("review") or {}).get("disabled") or [])
     rows, weak_all = [], {}
+    merged: dict[str, dict] = {}
     for tier, stats in tier_stats.items():
         for persona in sorted(stats):
             s = stats[persona]
             fmt = lambda v: "—" if v is None else f"{v:.2f}"  # noqa: E731
             rows.append(f"| {persona} | {tier} | {s['cases']} | {s['caught']} | {fmt(s['catch_rate'])} | {s['clean']} | "
                         f"{s['false_alarms']} | {fmt(s['false_alarm_rate'])} | {', '.join(s['missed']) or '—'} |")
-        for p in proposal(stats, min_catch, disabled):
-            weak_all.setdefault(p, []).append(tier)
-    propose = sorted(weak_all)
+        for p, st in stats.items():
+            if st["catch_rate"] is not None and st["catch_rate"] < min_catch:
+                weak_all.setdefault(p, []).append(tier)
+                merged[p] = {"catch_rate": 0.0}
+    propose = proposal(merged, min_catch, disabled)  # one check over all tiers: never fewer than 2 Inspectors
+    weak_all = {p: t for p, t in weak_all.items() if p in propose}
     text = ("---\nid: calibration\ntitle: Reviewer calibration\ntype: review\nstatus: in-review\n---\n\n"
             f"Suite: {n_cases} cases (built-in planted flaws and clean controls, plus any in `.sparkwright/calibration/`).\n"
-            "Catch: a high or medium finding citing the flawed IDs or naming the flaw. False alarm: a high finding on a "
-            "clean control.\n\n| Persona | Tier | Flawed cases | Caught | Catch rate | Clean cases | False alarms | "
+            "Catch: a high or medium finding that names the flaw and points at the flawed requirement. False alarm: a "
+            "high or medium finding on a clean control. Missing or unparseable replies are not scored.\n\n| Persona | Tier | Flawed cases | Caught | Catch rate | Clean cases | False alarms | "
             "False-alarm rate | Missed |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n" + "\n".join(rows) + "\n")
     text += f"\n## Proposal\n\nMinimum catch rate: {min_catch:.2f} (`calibration.min_catch_rate`).\n\n"
     if propose:

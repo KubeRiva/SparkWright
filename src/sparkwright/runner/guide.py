@@ -123,6 +123,7 @@ def _write_guide(root: Path, log: RunLog, start: dict, draft: str) -> Path:
     draft = re.sub(r"^---\n.*?\n---\n", "", draft, flags=re.S)  # the engine owns front matter
     if not re.search(r"^## Core questions", draft, re.M):
         raise GuideError("the guide has no '## Core questions' section")
+    draft_involves_parents = bool(re.search(r"\b(parent|guardian)s?\b", draft, re.I))
     if start.get("minors"):
         draft = MINORS_SECTION + "\n" + draft.lstrip()
     path = _guide_path(root, start["about"])
@@ -130,7 +131,7 @@ def _write_guide(root: Path, log: RunLog, start: dict, draft: str) -> Path:
             "status": "draft", "minors": bool(start.get("minors"))}
     path.write_text("---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n\n" + draft.strip() + "\n",
                     encoding="utf-8")
-    log.append("write", status="done", guide=str(path.relative_to(root).as_posix()))
+    log.append("write", status="done", guide=str(path.relative_to(root).as_posix()), parents=draft_involves_parents)
     return path
 
 
@@ -140,9 +141,9 @@ def _auditor_prompt(root: Path, run_dir: Path, guide: Path) -> Path:
     return prompt
 
 
-def _finish(root: Path, log: RunLog, guide: Path, audit: list[Finding], minors: bool) -> dict:
+def _finish(root: Path, log: RunLog, guide: Path, audit: list[Finding], minors: bool, parents: bool) -> dict:
     findings = lint(_read(guide)) + audit
-    if minors and "parent" not in _read(guide).lower():
+    if minors and not parents:  # judged on the writer's draft, before the engine's consent section was added
         findings.insert(0, Finding("high", [], "Target users include minors but the guide does not involve parents.",
                                    "Direct interviews to parents or require recorded parental consent (S7.7).", ["engine"]))
     high = [f for f in findings if f.severity == "high"]
@@ -198,7 +199,9 @@ def advance(root: Path | str, run_id: str, writer_reply: str | None = None, audi
         audit = [Finding("high", [], "The Question Auditor's reply was not a JSON findings array.", "Run it again.", ["engine"])]
     for f in audit:
         f.personas = [AUDITOR]
-    out = _finish(root, log, guide, audit, bool(start.get("minors")) or "Participants under 18" in _read(guide))
+    written = next((r for r in log.records() if r.get("step") == "write"), {})
+    out = _finish(root, log, guide, audit, bool(start.get("minors")) or "Participants under 18" in _read(guide),
+                  bool(written.get("parents")))
     out.update({"run_id": run_id, "step": "done"})
     return out
 

@@ -10,11 +10,12 @@ back to a requirement and the user evidence behind it.
 
 Part of the [KubeRiva](https://github.com/kuberiva) open-source family.
 
-> Status: early development (0.1.0.dev0). The offline core, the interview,
-> review, descend and build workflows, the Saboteur and the Claude Code
-> adapter work today. Not yet built: adopting existing codebases, parallel
-> builds, the Prover and reviewer calibration. See `specs/system.md`,
-> section "MVP scope", and `docs/quickstart-claude-code.md` to try it.
+> Status: early development (0.1.0.dev0). Every workflow in `specs/system.md`
+> is implemented: interviews and interview guides, review, descend, adopt,
+> build (including parallel builds and the Prover hook), change requests and
+> reviewer calibration, with a Claude Code adapter. Not yet done: a public
+> benchmark run, a PyPI release and adapters beyond Claude Code and AGENTS.md.
+> See `docs/quickstart-claude-code.md` to try it.
 
 ## Why
 
@@ -48,9 +49,13 @@ Python 3.10+. One runtime dependency (PyYAML).
 | `sparkwright approve <ID> --as <name>` | Record a human approval (append-only, hashed, records the risk tier) | No |
 | `sparkwright interview owner` | Interview the owner one question at a time → evidence | Yes ¹ |
 | `sparkwright interview ingest <file> --consent "..."` | Turn a user-interview transcript into anonymized evidence | Yes ¹ |
+| `sparkwright interview guide --about "..."` | Draft an interview guide for real users; check it for leading questions (parental consent for minors) | Yes ¹ |
+| `sparkwright adopt` | Draft System, Component and Task specs bottom-up from an existing codebase | Yes ¹ |
 | `sparkwright review <ID>` | Fresh-context Inspector swarm, merged findings, gate | Yes ¹ |
 | `sparkwright descend <ID>` | Architect drafts the next level (component or tasks) under an approved requirement | Yes ¹ |
-| `sparkwright build <task>` | Tests first, property tests for invariants, code, checks, library check, mutation, test lock, code and security review, on its own branch | Yes ¹ |
+| `sparkwright build <task>` | Tests first, property tests for invariants, code, checks, Prover (`prove: true`), library check, mutation, test lock, code and security review, on its own branch | Yes ¹ |
+| `sparkwright build <task> <task> ... --plan` | Group tasks into batches whose files cannot overlap (build a batch in parallel) | No |
+| `sparkwright calibrate` | Score each Inspector on planted-flaw specs: catch rate and false-alarm rate | Yes ¹ |
 | `sparkwright verify` | Run the project's checks from config | No |
 | `sparkwright mutate --base <rev>` | Saboteur: mutation-test the lines you changed | No |
 | `sparkwright change new <ID> \| apply <CR>` | Open or apply a change request when an approved spec is wrong | No |
@@ -59,8 +64,8 @@ Python 3.10+. One runtime dependency (PyYAML).
 
 ¹ Either a configured model provider (Runner mode), or a host coding agent
 that runs the agent steps itself (host mode: `--prepare`/`--collect` for
-interview, review and descend, `--next`/`--done` for build). In host mode no
-separate API key is needed.
+interview, review, descend, adopt and calibrate, `--next`/`--done` for build).
+In host mode no separate API key is needed.
 
 **Risk tiers.** Component and task files declare `risk: low | medium | high`.
 High-risk work always gets the Security Reviewer, in spec review and after

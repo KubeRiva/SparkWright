@@ -92,6 +92,10 @@ def active_builds(root: Path | str) -> list[dict]:
     for task, st in latest.items():
         if st.get("phase") in ("blocked", "changed", "prepare") or not st.get("branch") or not st.get("base"):
             continue
+        # run logs are not trusted: only a commit hash and a SparkWright branch name ever reach git
+        if not re.fullmatch(r"[0-9a-f]{40,64}", str(st["base"])) or \
+                not re.fullmatch(r"sparkwright/C\d+\.\d+\.\d+\.T\d+(-\d+)?", str(st["branch"])):
+            continue
         tip = _git(root, "rev-parse", "--verify", "-q", st["branch"]).strip()
         if not tip:
             continue
@@ -104,4 +108,6 @@ def active_builds(root: Path | str) -> list[dict]:
 
 
 def changed_files(root: Path | str, base: str, rev: str) -> set[str]:
-    return {f for f in _git(Path(root), "diff", "--name-only", base, rev).splitlines() if f and not f.startswith("specs/")}
+    if str(base).startswith("-") or str(rev).startswith("-"):
+        return set()
+    return {f for f in _git(Path(root), "diff", "--name-only", base, rev, "--").splitlines() if f and not f.startswith("specs/")}
