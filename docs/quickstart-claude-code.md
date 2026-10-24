@@ -26,9 +26,14 @@ claude plugin marketplace add D:\SparkWright
 claude plugin install sparkwright@sparkwright
 ```
 
-This adds five skills (`sparkwright-interview`, `sparkwright-review`,
-`sparkwright-build`, `sparkwright-check`, `sparkwright-mutate`), the fresh-context
-agents they use, and the guard hook.
+This adds six skills (`sparkwright-interview`, `sparkwright-review`,
+`sparkwright-descend`, `sparkwright-build`, `sparkwright-check`,
+`sparkwright-mutate`), the fresh-context agents they use, and the guard hook.
+
+If you installed the plugin before, update it after pulling SparkWright
+changes: `claude plugin marketplace update sparkwright` then
+`claude plugin update sparkwright@sparkwright`, and restart Claude Code. If
+an update is not picked up, uninstall and install it again.
 
 ## 3. Continue the ChessTutor hint-ladder slice (lab copy)
 
@@ -48,10 +53,12 @@ In Claude Code, ask for one task at a time:
 
 > Build task C1.1.2.T1 with the sparkwright-build skill.
 
-Claude Code runs the loop: a fresh Test Author writes failing tests, a fresh
-Builder implements, SparkWright runs your checks, the library check and
-mutation testing, locks the tests, a fresh Code Reviewer reviews, and a final
-gate re-checks everything from git. When it reports **ready**:
+Claude Code runs the loop: a fresh Test Author writes failing tests (plus a
+fresh Property Tester when the task declares `invariants`), a fresh Builder
+implements, SparkWright runs your checks, the library check and mutation
+testing, locks the tests, a fresh Code Reviewer reviews, and a final gate
+re-checks everything from git. C1 is `risk: high`, so a fresh Security
+Reviewer also reviews each diff after the Code Reviewer. When it reports **ready**:
 
 ```powershell
 git diff sparkwright/dogfood...sparkwright/C1.1.2.T1     # review
@@ -67,7 +74,8 @@ Remaining tasks, in a sensible order:
 | Step | In Claude Code, ask… | Or run |
 | --- | --- | --- |
 | Evidence | "Interview me with the sparkwright-interview skill" | `sparkwright interview owner --host --consent "..."` |
-| Vision / System / Component | write them with Claude, then "Review VISION with the sparkwright-review skill" | `sparkwright review VISION --prepare` |
+| Vision / System | write them with Claude, then "Review VISION with the sparkwright-review skill" | `sparkwright review VISION --prepare` |
+| Component / Tasks | "Descend S2.1 with the sparkwright-descend skill", then review the draft | `sparkwright descend S2.1 --prepare` |
 | Approve (you, never an agent) | — | `sparkwright approve SYSTEM --as Srikanth` then commit |
 | Build | "Build task C2.1.1.T1 with the sparkwright-build skill" | `sparkwright build C2.1.1.T1 --next` |
 | Check traceability | "Run sparkwright check and trace V1" | `sparkwright trace V1` |

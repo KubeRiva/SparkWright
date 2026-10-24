@@ -16,7 +16,9 @@
     "./agents/sparkwright-security-reviewer.md",
     "./agents/sparkwright-code-reviewer.md",
     "./agents/sparkwright-theme-synthesizer.md",
+    "./agents/sparkwright-architect.md",
     "./agents/sparkwright-test-author.md",
+    "./agents/sparkwright-property-tester.md",
     "./agents/sparkwright-builder.md"
   ],
   "hooks": {

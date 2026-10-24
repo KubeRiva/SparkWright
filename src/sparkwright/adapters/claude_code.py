@@ -17,14 +17,20 @@ from .neutral import load_skills
 
 PLUGIN = "sparkwright"
 REVIEW_PERSONAS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devils-advocate",
-                   "buildability-checker", "security-reviewer", "code-reviewer", "theme-synthesizer"]
+                   "buildability-checker", "security-reviewer", "code-reviewer", "theme-synthesizer", "architect"]
+
+RUN_ARCHITECT = (
+    "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-architect`, "
+    "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Reply with only the Markdown it asks for.\" "
+    "Pass no conversation history or opinion. Write the agent's reply verbatim to `data.result_file`."
+)
 
 RUN_SYNTHESIZER = (
     "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-theme-synthesizer`, "
     "and ONLY this task text: \"Read <absolute path of data.prompt> and follow it. Reply with only the JSON object.\" "
     "You conducted the interview, so you must not write the themes yourself. Write the agent's reply verbatim to `data.result_file`."
 )
-BUILD_PERSONAS = ["test-author", "builder"]  # need to edit files and run tests in the task workspace
+BUILD_PERSONAS = ["test-author", "property-tester", "builder"]  # need to edit files and run tests in the task workspace
 
 RUN_BUILD_AGENT = (
     "launch ONE agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-<data.persona>`, "
@@ -102,7 +108,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
         put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name], build=True))
         agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
     for skill in load_skills():
-        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER)
+        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT)
         put(f"skills/{skill.name}/SKILL.md",
             f"---\nname: {skill.name}\ndescription: {skill.description}\n---\n\n{body.strip()}\n")
     manifest = {

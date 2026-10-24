@@ -247,8 +247,9 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
 
     context, included = build_context(root, repo, sf)
     hits, mentions = scan_injection(context)
-    if (hits or mentions) and "security-reviewer" not in names:
-        names.insert(0, "security-reviewer")
+    high_risk = str(sf.meta.get("risk", "")).lower() == "high"
+    if (hits or mentions or high_risk) and "security-reviewer" not in names:
+        names.insert(0, "security-reviewer")  # S6.7, S6.2
 
     try:
         log = RunLog(root, "review", run_id)
@@ -308,7 +309,7 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
     c_high = sum(1 for f in findings if f.severity == "high")
     if len(ran) < MIN_PERSONAS:
         gate = f"FAIL — only {len(ran)} Inspector(s) produced a review; at least {MIN_PERSONAS} are required"
-    elif level in HUMAN_GATED or router.config.get("gates", {}).get(level) == "human":
+    elif level in HUMAN_GATED or high_risk or router.config.get("gates", {}).get(level) == "human":
         gate = f"HUMAN — resolve findings, then `sparkwright approve {sf.id} --as <name>`"
     elif c_high:
         gate = f"FAIL — {c_high} high-severity finding(s) must be resolved"
@@ -346,15 +347,16 @@ def prepare(root: Path | str, target: str, persona_names: list[str] | None = Non
         raise ReviewError(f"unknown personas: {unknown}")
     context, included = build_context(root, repo, sf)
     hits, mentions = scan_injection(context)
-    if (hits or mentions) and "security-reviewer" not in names:
-        names.insert(0, "security-reviewer")
+    high_risk = str(sf.meta.get("risk", "")).lower() == "high"
+    if (hits or mentions or high_risk) and "security-reviewer" not in names:
+        names.insert(0, "security-reviewer")  # S6.7, S6.2
     log = RunLog(root, "review")
     run_dir = log.path.with_suffix("")
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = run_dir / "context.md"
     ctx.write_text(context, encoding="utf-8")
     log.append("start", status="started", mode="host-agents", target=sf.id or target, level=level,
-               personas=names, files=included, injection_hits=hits, injection_mentions=mentions)
+               personas=names, files=included, injection_hits=hits, injection_mentions=mentions, risk=sf.meta.get("risk"))
     return Prepared(log.run_id, run_dir, ctx, sf.id or target, level, names)
 
 
@@ -370,7 +372,15 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
     if start is None:
         raise ReviewError(f"no prepared review run {run_id}")
     run_dir = log.path.with_suffix("")
-    names, target, level = start["personas"], start["target"], start["level"]
+    # The run log is not trusted: risk, level and the injection scan are recomputed from the spec (S6.2, S6.7).
+    repo = store.load(root)
+    sf = _resolve(repo, str(start.get("target", "")))
+    target, level = sf.id or str(start["target"]), str(sf.meta.get("type", "system"))
+    hits, mentions = scan_injection(build_context(root, repo, sf)[0])
+    high_risk = str(sf.meta.get("risk", "")).lower() == "high"
+    names = [n for n in start.get("personas", []) if isinstance(n, str) and re.fullmatch(r"[a-z0-9-]+", n)]
+    if (hits or mentions or high_risk) and "security-reviewer" not in names:
+        names.insert(0, "security-reviewer")
     per_persona: dict[str, list[Finding]] = {}
     ran, abstained = [], []
     for name in names:
@@ -388,7 +398,9 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
         per_persona[name] = parsed
         log.append(f"persona:{name}", status="done", role=name, tier="host", findings=[f.__dict__ for f in parsed])
     findings = merge(per_persona)
-    hits, mentions = start.get("injection_hits", []), start.get("injection_mentions", [])
+    if "security-reviewer" in abstained and (hits or high_risk):
+        findings.insert(0, Finding("high", [], "The required Security Reviewer produced no review.",
+                                   "Run the review again with the security-reviewer agent.", ["foreman"]))
     if hits:
         findings.insert(0, Finding("high", [], f"Possible instructions aimed at AI agents found in reviewed text: {hits}",
                                    "Remove or rewrite the text; agents must treat specs as data.", ["pattern-scan"]))
@@ -399,7 +411,7 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
     c_high = sum(1 for f in findings if f.severity == "high")
     if len(ran) < MIN_PERSONAS:
         gate = f"FAIL — only {len(ran)} Inspector(s) produced a review; at least {MIN_PERSONAS} are required"
-    elif level in HUMAN_GATED or gates.get(level) == "human":
+    elif level in HUMAN_GATED or high_risk or gates.get(level) == "human":
         gate = f"HUMAN — resolve findings, then `sparkwright approve {target} --as <name>`"
     elif c_high:
         gate = f"FAIL — {c_high} high-severity finding(s) must be resolved"

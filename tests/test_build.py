@@ -25,13 +25,16 @@ WEAK_TESTS = ("# sparkwright: C1.1.1.T1\nimport unittest\nfrom calc import clamp
 CODE = "def clamp(x, lo, hi):\n    if x < lo:\n        return lo\n    if x > hi:\n        return hi\n    return x\n"
 
 
-def project(r: Path) -> None:
+def project(r: Path, extra_yaml: str = "", risk: str = "") -> None:
     write(r, "specs/evidence/E1.md", "---\nid: E1\ntitle: t\ntype: evidence\nstatus: draft\n---\nUsers need clamping.\n")
     write(r, "specs/vision.md", spec("VISION", "vision", "- **V1** [E1] Values stay in range.\n"))
     write(r, "specs/system.md", spec("SYSTEM", "system", "- **S1.1** [V1] The library shall clamp numbers.\n"))
-    write(r, "specs/components/C1.md", spec("C1", "component",
+    comp = spec("C1", "component",
           "- **C1.1.1** [S1.1] clamp(x, lo, hi) returns x limited to [lo, hi].\n\n"
-          "## Tasks\n\n- **C1.1.1.T1** [C1.1.1] Implement clamp in calc.py.\n\n```yaml\nfiles: [\"calc.py\"]\n```\n"))
+          "## Tasks\n\n- **C1.1.1.T1** [C1.1.1] Implement clamp in calc.py.\n\n```yaml\nfiles: [\"calc.py\"]\n" + extra_yaml + "```\n")
+    if risk:
+        comp = comp.replace("risk: low", f"risk: {risk}", 1)
+    write(r, "specs/components/C1.md", comp)
     write(r, "calc.py", "")
     write(r, "tests/__init__.py", "")
     write(r, ".sparkwright/config.yaml",

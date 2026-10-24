@@ -5,4 +5,4 @@ skills and personas in the SparkWright package and regenerate.
 
 Requires the `sparkwright` CLI on PATH (`pip install sparkwright`).
 
-Skills: sparkwright-build, sparkwright-check, sparkwright-interview, sparkwright-mutate, sparkwright-review.
+Skills: sparkwright-build, sparkwright-check, sparkwright-descend, sparkwright-interview, sparkwright-mutate, sparkwright-review.

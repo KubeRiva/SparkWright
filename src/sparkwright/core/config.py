@@ -29,6 +29,7 @@ DEFAULTS: dict = {
     "protected": {
         "builder": ["specs/**", ".sparkwright/config.yaml", "AGENTS.md", "personas/**"],
         "test-author": ["src/**", "specs/**"],
+        "property-tester": ["src/**", "specs/**"],
     },
 }
 

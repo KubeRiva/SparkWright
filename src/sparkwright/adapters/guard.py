@@ -38,17 +38,19 @@ def decide_path(root, target):
     except ValueError:
         return None, ""
     ws = None
-    m = re.match(r"^\.sparkwright/worktrees/([^/]+)/(.*)$", rel)
+    flags = re.I if FOLD else 0  # case-insensitive file systems: .SPARKWRIGHT is .sparkwright
+    m = re.match(r"^\.sparkwright/worktrees/([^/]+)/(.*)$", rel, flags)
     if m:  # a build workspace: apply the same rules relative to the workspace root
         ws, rel = root / ".sparkwright" / "worktrees" / m.group(1), m.group(2)
-    elif rel.startswith(".sparkwright/"):
-        if re.match(r"^\.sparkwright/runs/[^/]+/([\w.-]+\.json|transcript\.md)$", rel):
+    elif norm(rel).startswith(".sparkwright/"):
+        if re.match(r"^\.sparkwright/runs/[^/]+/([\w.-]+\.json|transcript\.md|[\w-]+\.result\.md)$", rel, flags) \
+                and not rel.lower().endswith(".jsonl"):
             return None, ""  # host agents hand their replies and transcripts to the CLI through these files
         return "deny", "SparkWright run state is written only by the sparkwright CLI."
     rel = norm(rel)
     if rel == norm("specs/approvals.jsonl") or rel == norm("specs/events.jsonl"):
         return "deny", "Approvals and events are recorded only by the sparkwright CLI."
-    if rel == ".git" or rel.startswith(".git/"):
+    if norm(rel) == ".git" or norm(rel).startswith(".git/"):
         return "deny", "Agents may not edit git internals."
     if rel in locked_tests(root, ws):
         return "deny", f"{rel} is a locked test; changing it needs an approved change request."

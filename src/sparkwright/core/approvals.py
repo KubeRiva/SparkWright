@@ -19,6 +19,7 @@ class Approval:
     role: str
     change_request: str | None
     time: str
+    risk: str | None = None  # risk tier of the owning file when approved (S6.2)
 
 
 def read(root: Path | str) -> tuple[list[Approval], list[str]]:
@@ -34,7 +35,8 @@ def read(root: Path | str) -> tuple[list[Approval], list[str]]:
             d = json.loads(line)
             aid = d["id"] if str(d["id"]).startswith("test:") else ids.canonical(str(d["id"]))
             cr = ids.canonical(d["change_request"]) if d.get("change_request") else None
-            out.append(Approval(aid, d["hash"], d["approver"], d["role"], cr, d["time"]))
+            out.append(Approval(aid, d["hash"], d["approver"], d["role"], cr, d["time"],
+                                str(d["risk"]) if d.get("risk") else None))
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             errors.append(f"{APPROVALS_PATH}:{n}: invalid entry ({exc})")
     return out, errors
@@ -52,8 +54,23 @@ def append(root: Path | str, entries: list[Approval]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         for e in entries:
-            fh.write(json.dumps(asdict(e), sort_keys=True) + "\n")
+            d = asdict(e)
+            if d.get("risk") is None:
+                d.pop("risk", None)
+            fh.write(json.dumps(d, sort_keys=True) + "\n")
 
 
 def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="microseconds")
+
+
+def risk_of(repo, rid: str) -> str | None:
+    """Risk tier of the file that owns a requirement (None when the file declares none)."""
+    sf = repo.file_of.get(rid)
+    r = sf.meta.get("risk") if sf is not None else None
+    return str(r).strip().lower() if r else None
+
+
+def risk_matches(appr: Approval, repo, rid: str) -> bool:
+    """An approval recorded under another risk tier no longer counts (S6.2: risk changes need a human)."""
+    return appr.risk is None or appr.risk.strip().lower() == risk_of(repo, rid)

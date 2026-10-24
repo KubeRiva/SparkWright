@@ -34,7 +34,9 @@ from .runlog import RunLog
 from .verify import command_env, run_checks
 
 MAX_ROUNDS = 2
-AGENT_STEPS = {"test-author", "builder", "code-reviewer"}
+AGENT_STEPS = {"test-author", "property-tester", "builder", "code-reviewer", "security-reviewer"}
+REVIEW_STEPS = {"code-reviewer": "code review", "security-reviewer": "security review"}
+TEST_ROLES = {"test-author", "property-tester"}
 TERMINAL = {"ready", "blocked", "changed"}
 ENGINE_DIRTY_OK = ("specs/events.jsonl", "specs/changes/")  # the engine itself writes these in the main tree
 
@@ -49,12 +51,13 @@ class State:
     base: str | None = None
     workspace: str | None = None
     branch: str | None = None
-    rounds: dict = field(default_factory=lambda: {"red": 0, "builder": 0, "saboteur": 0})
+    rounds: dict = field(default_factory=lambda: {"red": 0, "props": 0, "builder": 0, "saboteur": 0})
     frozen: bool = False
     feedback: str = ""
     step_head: str | None = None   # workspace HEAD when the current agent step started
     red_commit: str | None = None
     result: dict = field(default_factory=dict)
+    high_risk: bool = False        # risk tier frozen at prepare time (S6.2)
 
 
 # ------------------------------------------------------------------ helpers
@@ -148,6 +151,7 @@ class Build:
         if not self.req.refs:
             raise BuildError(f"task {self.task} cites no parent")
         self.files = list(self.req.extras.get("files") or [])
+        self._live_high_risk = str(self.repo.file_of[self.task].meta.get("risk", "")).strip().lower() == "high"
         if not self.files:
             raise BuildError(f"task {self.task} declares no `files`; add a yaml block with files: [...] (S1.8)")
         self.test_globs = list(self.cfg["test_globs"])
@@ -182,6 +186,11 @@ class Build:
                 except TypeError:
                     pass
         self.state = st
+
+    @property
+    def high_risk(self) -> bool:
+        """S6.2: high if the tier was high when the build started OR is high now; editing the spec mid-build cannot lower it."""
+        return self.state.high_risk or self._live_high_risk
 
     def _save(self, note: str = "") -> None:
         self.log.append("state", status="done", state=asdict(self.state), note=note)
@@ -256,12 +265,16 @@ class Build:
                 parts.append(f"=== TEST ({f}) ===\n" + _read(ws / f))
             for f in self._existing_task_files(ws):
                 parts.append(f"=== CURRENT SOURCE ({f}) ===\n" + _read(ws / f))
+        if role == "property-tester":
+            for f in self._test_files(ws):
+                parts.append(f"=== EXISTING TEST, DO NOT EDIT ({f}) ===\n" + _read(ws / f))
+            parts.append("=== INVARIANTS TO TEST ===\n" + "\n".join(f"- {i}" for i in self.req.extras.get("invariants", [])))
         if role == "test-author" and self.state.frozen:
             for f in self._existing_task_files(ws):
                 parts.append(f"=== IMPLEMENTATION, FROZEN ({f}) ===\n" + _read(ws / f))
             for f in self._test_files(ws):
                 parts.append(f"=== CURRENT TEST ({f}) ===\n" + _read(ws / f))
-        if role == "code-reviewer":
+        if role in REVIEW_STEPS:
             parts.append("=== DIFF ===\n" + _git(ws, "diff", self.state.base, "HEAD", "--", ".", ":(exclude)specs")[:80_000])
         if self.state.feedback:
             parts.append("=== FEEDBACK FROM THE PREVIOUS ATTEMPT ===\n" + self.state.feedback)
@@ -306,7 +319,11 @@ class Build:
     def _allowed(self, role: str, path: str, deleted: bool, locked: set[str]) -> bool:
         if safe_relpath(path) is None or path.startswith("specs/"):
             return False
-        if role == "test-author":
+        if role == "property-tester":
+            name = PurePosixPath(path).name
+            if not name.startswith("test_") or name in ("conftest.py", "__init__.py"):
+                return False
+        if role in TEST_ROLES:
             return _match(path, self.test_globs) and path not in locked and not deleted
         if role == "builder":
             return _match(path, self.files) and not _match(path, self.test_globs)
@@ -321,7 +338,7 @@ class Build:
         if _git(ws, "rev-parse", "HEAD").strip() != st.step_head:
             self.log.append(f"unwind:{role}", status="done", note="agent-made commits turned back into changes")
             _git(ws, "reset", "-q", "--soft", st.step_head)
-        locked = set(self._locked_at(st.base))
+        locked = self._locked_for(role)
         tracked = set(_git(ws, "ls-tree", "-r", "--name-only", st.step_head).splitlines())
         bad = []
         for code, path in _status(ws):
@@ -339,10 +356,22 @@ class Build:
                         shutil.rmtree(target)
         return sorted(set(bad))
 
+    def _locked_for(self, role: str) -> set[str]:
+        st = self.state
+        ws = Path(st.workspace)
+        locked = set(self._locked_at(st.base))
+        if role == "property-tester":  # may only add new test files: every tracked file is off limits
+            locked |= set(_git(ws, "ls-tree", "-r", "--name-only", st.step_head).splitlines())
+        elif role == "test-author":  # later Test Author rounds may not rewrite the property tests
+            for sha, subj, r in self._role_commits():
+                if r == "property-tester" and subj.endswith(": property tests (red)"):
+                    locked |= set(_git(ws, "show", "--name-only", "--format=", sha).splitlines())
+        return locked
+
     def _apply_files(self, role: str, files) -> list[str]:
         """Runner mode: write proposed files after validation (S6.5: refuse, don't write-then-revert)."""
         ws = Path(self.state.workspace).resolve()
-        locked = set(self._locked_at(self.state.base))
+        locked = self._locked_for(role)
         refused = []
         if not isinstance(files, dict):
             return ["<files is not an object>"]
@@ -408,26 +437,27 @@ class Build:
         if step != st.phase or step not in AGENT_STEPS:
             raise BuildError(f"expected result for step '{st.phase}', got '{step}'")
         self.log.append(f"agent:{step}", status="done", role=step, output=output[:4000])
-        if step == "code-reviewer":
+        if step in REVIEW_STEPS:
             ws = Path(st.workspace)
             _git(ws, "checkout", "-q", "-f", st.branch, check=False)
             _git(ws, "reset", "-q", "--hard", st.step_head)
             _git(ws, "clean", "-q", "-fd")
+            who = step.replace("-", " ").title()
             findings = parse_findings(output)
             if findings is None:
-                return self._block("Code Reviewer output was not a JSON findings array")
-            self._write_code_review(findings)
+                return self._block(f"{who} output was not a JSON findings array")
+            self._write_code_review(findings, step)
             high = [f for f in findings if f.severity == "high"]
             if high:
                 st.rounds["builder"] += 1
                 if st.rounds["builder"] > MAX_ROUNDS:
-                    return self._block("Code Reviewer still reports high-severity findings after 2 rounds")
-                st.feedback = "Code Reviewer high-severity findings:\n" + "\n".join(f"- {f.finding} Fix: {f.fix}" for f in high)
+                    return self._block(f"{who} still reports high-severity findings after 2 rounds")
+                st.feedback = f"{who} high-severity findings:\n" + "\n".join(f"- {f.finding} Fix: {f.fix}" for f in high)
                 self._enter("builder")
             else:
                 st.feedback = ""
-                self._enter("finish")
-            self._save("code review recorded")
+                self._enter("security-reviewer" if step == "code-reviewer" and self.high_risk else "finish")
+            self._save(f"{REVIEW_STEPS[step]} recorded")
             return self.advance()
         reply = _parse_reply(output)
         refused = []
@@ -442,6 +472,8 @@ class Build:
         st.feedback = f"These changes were refused or reverted because the {step} may not make them: {bad}\n" if bad else ""
         if step == "test-author":
             self._enter("tests-pass" if st.frozen else "red-check")
+        elif step == "property-tester":
+            self._enter("property-check")
         else:
             self._enter("commit-build")
         self._save(f"{step} submitted")
@@ -452,7 +484,7 @@ class Build:
         ins = self.advance()
         while ins["kind"] == "agent":
             prompt = (self.root / ins["prompt"]).read_text(encoding="utf-8").split("\n\n", 1)[1]
-            if ins["step"] != "code-reviewer":
+            if ins["step"] not in REVIEW_STEPS:
                 prompt += ("\n\nYou cannot edit files directly. Reply with ONE JSON object: "
                            '{"files": {"<relative path>": "<full new content>"}, "status": "ok"} '
                            'or {"spec_defect": {"cited_id": "...", "reason": "..."}}.')
@@ -484,6 +516,7 @@ class Build:
         _git(self.root, "branch", "-D", branch, check=False)
         _git(self.root, "worktree", "add", "-q", "-b", branch, str(ws), base)
         self.state.base, self.state.workspace, self.state.branch = base, str(ws), branch
+        self.state.high_risk = self._live_high_risk  # the main tree is clean here, so this is the base commit's tier
         base_run = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
         if not base_run.ok and not _runner_broken(base_run.output):
             self._block("The test suite already fails before this task starts; fix it first, because the red check "
@@ -547,8 +580,40 @@ class Build:
         st.red_commit = _commit(ws, self.task, "test-author", "tests (red)", new_tests)
         self.log.append("red-check", status="done", tests=new_tests)
         st.feedback = ""
-        self._enter("builder")
+        self._enter("property-tester" if self.req.extras.get("invariants") else "builder")
         self._save("tests red and committed")
+
+    def _step_property_check(self) -> None:
+        st, ws = self.state, Path(self.state.workspace)
+        new = [f for f in _changed(ws) if _match(f, self.test_globs) and (ws / f).is_file()]
+        problem = "" if new else "No property test files were written."
+        for f in new:
+            text = _read(ws / f)
+            if f.endswith(".py"):
+                try:
+                    py_compile.compile(str(ws / f), doraise=True)
+                except py_compile.PyCompileError as exc:
+                    problem = f"Property test file {f} does not compile: {exc.msg}"
+                    break
+            if not re.search(r"\bassert", text):
+                problem = f"Property test file {f} asserts nothing."
+            elif re.search(r"\b(skip|skipIf|skipUnless|xfail|expectedFailure)\b", text):
+                problem = f"Property test file {f} skips or expects failures; property tests must run and must pass once implemented."
+            elif self.task not in text:
+                problem = f"Property test file {f} lacks the annotation `sparkwright: {self.task}`."
+        if problem:
+            st.rounds["props"] = st.rounds.get("props", 0) + 1
+            if st.rounds["props"] > MAX_ROUNDS:
+                self._block(f"Property tests failed after {MAX_ROUNDS} rounds: {problem}")
+                return
+            st.feedback = problem
+            self._enter("property-tester")
+            self._save("property check failed")
+            return
+        _commit(ws, self.task, "property-tester", "property tests (red)", new)
+        st.feedback = ""
+        self._enter("builder")
+        self._save("property tests committed")
 
     def _step_tests_pass(self) -> None:
         st, ws = self.state, Path(self.state.workspace)
@@ -664,19 +729,20 @@ class Build:
         self._enter("code-reviewer")
         self._save("tests locked")
 
-    def _write_code_review(self, findings: list[Finding]) -> None:
+    def _write_code_review(self, findings: list[Finding], step: str = "code-reviewer") -> None:
         ws = Path(self.state.workspace)
         n = sum(self.state.rounds.values())
-        rel = f"specs/reviews/{date.today().isoformat()}-{self.task.lower()}-code-{self.run_no}-{n}.md"
+        kind = "security" if step == "security-reviewer" else "code"
+        rel = f"specs/reviews/{date.today().isoformat()}-{self.task.lower()}-{kind}-{self.run_no}-{n}.md"
         digits = "".join(ch for ch in self.task if ch.isdigit())
         rows = "\n".join(f"| F{i} | {f.severity} | {', '.join(f.ids) or '—'} | {_cell(f.finding)} | {_cell(f.fix)} | open |"
                          for i, f in enumerate(findings, 1)) or "| — | — | — | No findings | — | — |"
         (ws / rel).parent.mkdir(parents=True, exist_ok=True)
         (ws / rel).write_text(
-            f"---\nid: R{digits}{self.run_no}{n:02d}\ntitle: Code review of {self.task}\ntype: review\nstatus: in-review\n---\n\n"
+            f"---\nid: R{digits}{self.run_no}{n:02d}{'9' if kind == 'security' else ''}\ntitle: {kind.title()} review of {self.task}\ntype: review\nstatus: in-review\n---\n\n"
             "| ID | Severity | Requirements | Finding | Suggested fix | Decision |\n| --- | --- | --- | --- | --- | --- |\n"
             f"{rows}\n", encoding="utf-8")
-        _commit(ws, self.task, "runner", "code review", [rel])
+        _commit(ws, self.task, "runner", REVIEW_STEPS[step], [rel])
 
     # ---- final gate
     def _role_commits(self) -> list[tuple[str, str, str]]:
@@ -698,7 +764,12 @@ class Build:
             problems.append("workspace has uncommitted changes")
         commits = self._role_commits()
         roles = [(subj.split(": ", 1)[-1], role) for _, subj, role in commits]
-        for need in [("tests (red)", "test-author"), ("implement", "builder"), ("lock tests", "runner"), ("code review", "runner")]:
+        needed = [("tests (red)", "test-author"), ("implement", "builder"), ("lock tests", "runner"), ("code review", "runner")]
+        if self.req.extras.get("invariants"):
+            needed.append(("property tests (red)", "property-tester"))
+        if self.high_risk:
+            needed.append(("security review", "runner"))
+        for need in needed:
             if need not in roles:
                 problems.append(f"missing '{need[0]}' commit by {need[1]}")
         red = next((sha for sha, subj, role in commits if subj.endswith(": tests (red)") and role == "test-author"), None)

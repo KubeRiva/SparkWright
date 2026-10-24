@@ -2,7 +2,7 @@
 name: sparkwright-build
 description: Build one approved SparkWright task end to end — tests first by a separate agent, then code, project checks, library check, mutation testing, test locking and code review — on its own git branch. Use when the user asks to build or implement a task ID.
 cli: sparkwright build
-personas: [test-author, builder, code-reviewer]
+personas: [test-author, property-tester, builder, code-reviewer, security-reviewer]
 ---
 
 # Build a task
@@ -10,7 +10,9 @@ personas: [test-author, builder, code-reviewer]
 You are the orchestrator. You never write tests or code yourself: each agent
 step runs in a fresh agent so no role grades its own work.
 
-1. Run `sparkwright build <task-id> --next --json`.
+1. Run `sparkwright build <task-id> --next --json`. Agent steps are, in order: test-author,
+   property-tester (only when the task declares invariants), builder, code-reviewer, and
+   security-reviewer (only for `risk: high` tasks). Every merge of a high-risk task needs a human.
 2. Look at `data.kind` in the output:
    - `agent`: {{run_build_agent}}
      Then run the command in `data.then` with `--json`, and go back to step 2.

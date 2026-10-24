@@ -1,7 +1,7 @@
 """Derived per-requirement status (SYSTEM S2.8, decision D003)."""
 from __future__ import annotations
 
-from .approvals import Approval
+from .approvals import Approval, risk_matches
 from .events import Event
 from .store import Repo
 
@@ -19,7 +19,10 @@ def derive(repo: Repo, latest_approvals: dict[str, Approval], events: list[Event
     out: dict[str, str] = {}
     for rid, req in repo.requirements.items():
         appr = latest_approvals.get(rid)
-        approved_now = appr is not None and appr.hash == req.hash
+        approved_now = appr is not None and appr.hash == req.hash and risk_matches(appr, repo, rid)
+        if appr is not None and appr.hash == req.hash and not risk_matches(appr, repo, rid):
+            out[rid] = "draft"  # S6.2: the risk tier changed since approval; a human must re-approve first
+            continue
         evs = [e for _, _, e in timeline.get(rid, [])]
         last_changed = max((e.time for e in evs if e.event == "changed"), default=None)
         if last_changed and not (approved_now and appr.time >= last_changed):

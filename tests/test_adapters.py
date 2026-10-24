@@ -16,9 +16,9 @@ class TestNeutralSkills(unittest.TestCase):
     # sparkwright: S8.3
     def test_skills_render_without_unfilled_slots(self):
         skills = load_skills()
-        self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build"})
+        self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build", "sparkwright-descend"})
         for s in skills:
-            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z"))
+            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z", run_architect="W"))
 
 
 class TestClaudeCodeAdapter(unittest.TestCase):
@@ -31,7 +31,7 @@ class TestClaudeCodeAdapter(unittest.TestCase):
             for path in manifest["agents"]:
                 agent = (r / "plugin" / path).read_text()
                 self.assertIn("omitClaudeMd: true", agent)
-                if "test-author" in path or path.endswith("-builder.md"):
+                if any(n in path for n in ("test-author", "property-tester")) or path.endswith("-builder.md"):
                     self.assertIn("tools: [Read, Grep, Glob, Edit, Write, Bash]", agent)
                 else:  # Inspectors and the Code Reviewer are read-only
                     self.assertIn("tools: [Read, Grep, Glob]\n", agent)

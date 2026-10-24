@@ -192,12 +192,13 @@ def cmd_approve(args) -> int:
     blocked = []
     for r in reqs:
         prev = latest.get(r.id)
-        if prev and prev.hash == r.hash and derived.get(r.id) != "changed":
+        risk = approvals.risk_of(repo, r.id)
+        if prev and prev.hash == r.hash and derived.get(r.id) != "changed" and approvals.risk_matches(prev, repo, r.id):
             continue  # already approved as-is
         if prev and (prev.hash != r.hash or derived.get(r.id) == "changed") and not args.cr:
             blocked.append(r.id)
             continue
-        entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when))
+        entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk))
     if blocked:
         return _emit(args, "approve", False, {"needs_change_request": blocked},
                      "Refusing: these approved requirements changed and need a change request (--cr CR<n>): "
@@ -354,6 +355,30 @@ def cmd_interview(args) -> int:
     if res.saturated:
         msg += " Saturation reached: the last 3 interviews added no new themes."
     return _emit(args, "interview", True, {"path": str(res.path.relative_to(root)), "saturated": res.saturated}, msg)
+
+
+def cmd_descend(args) -> int:
+    from .runner import descend as ds
+    root = Path(args.root).resolve()
+    try:
+        if args.collect:
+            data = ds.collect(root, args.collect)
+        elif not args.id:
+            raise ds.DescendError("give the parent requirement ID")
+        elif args.prepare:
+            data = ds.prepare(root, args.id)
+            return _emit(args, "descend", True, data,
+                         f"Run a fresh Architect agent on {data['prompt']}, save its reply to "
+                         f"{data['result_file']}, then run: {data['then']}")
+        else:
+            data = ds.run(root, args.id, _router(args, root))
+    except (ds.DescendError, ProviderError, RoleFailed, OSError) as exc:
+        return _emit(args, "descend", False, {"error": str(exc)}, f"Stopped: {exc}")
+    msg = f"Draft written: {', '.join(data['files'])} ({', '.join(data['ids'])})."
+    if data["open_questions"]:
+        msg += "\nOpen questions from the Architect:\n" + "\n".join(f"- {q}" for q in data["open_questions"])
+    msg += f"\nNext: {data['next']}, then a human approves."
+    return _emit(args, "descend", True, data, msg)
 
 
 def cmd_mutate(args) -> int:
@@ -547,6 +572,12 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--simulated", action="store_true", help="mark evidence as simulated (never counts as evidence)")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_interview)
+    sp = common(sub.add_parser("descend", help="Architect drafts the next spec level under an approved requirement"))
+    sp.add_argument("id", nargs="?", help="approved system or component requirement ID, e.g. S1.2 or C1.2.1")
+    sp.add_argument("--prepare", action="store_true", help="host-agent mode: write the Architect prompt")
+    sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: validate the Architect's reply and write the draft")
+    sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(func=cmd_descend)
     sp = common(sub.add_parser("mutate", help="Saboteur: mutation-test lines changed since a git revision"))
     sp.add_argument("--base", required=True, help="git revision to diff against")
     sp.add_argument("--test-cmd", help="test command (default: checks.test in config)")

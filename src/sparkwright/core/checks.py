@@ -110,6 +110,12 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for e in evs:
         e.id = rn(e.id)
     derived = status_mod.derive(repo, latest, evs)
+    for rid, appr in latest.items():
+        if rid in repo.requirements and appr.hash == repo.requirements[rid].hash \
+                and not approvals_mod.risk_matches(appr, repo, rid):
+            add("warning", "approval.risk-changed",
+                f"{rid} was approved at risk '{appr.risk}' but its file now says "
+                f"'{approvals_mod.risk_of(repo, rid)}'; a human must re-approve it", id=rid)
     tests = {}
     for k, v in annotations.scan(root, cfg["test_globs"]).items():
         tests.setdefault(rn(k), []).extend(v)

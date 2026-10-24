@@ -10,9 +10,11 @@ back to a requirement and the user evidence behind it.
 
 Part of the [KubeRiva](https://github.com/kuberiva) open-source family.
 
-> Status: early development (0.1.0.dev0). The offline core, review and
-> interview workflows, the Saboteur and the Claude Code adapter work today; the
-> full build loop is next. See `specs/system.md`, section "MVP scope".
+> Status: early development (0.1.0.dev0). The offline core, the interview,
+> review, descend and build workflows, the Saboteur and the Claude Code
+> adapter work today. Not yet built: adopting existing codebases, parallel
+> builds, the Prover and reviewer calibration. See `specs/system.md`,
+> section "MVP scope", and `docs/quickstart-claude-code.md` to try it.
 
 ## Why
 
@@ -39,15 +41,31 @@ Python 3.10+. One runtime dependency (PyYAML).
 
 | Command | What it does | Needs a model? |
 | --- | --- | --- |
+| `sparkwright init` | Create `specs/`, templates and `.sparkwright/config.yaml` | No |
 | `sparkwright check` | Grammar, coverage, approval locks, drift, protected paths | No |
 | `sparkwright trace <ID>` | Why a requirement exists and what implements it | No |
-| `sparkwright status` | Levels, gaps, drift, agent cost | No |
-| `sparkwright approve <ID> --as <name>` | Record a human approval (append-only, hashed) | No |
+| `sparkwright status` | Levels, gaps, drift, open findings, agent cost | No |
+| `sparkwright approve <ID> --as <name>` | Record a human approval (append-only, hashed, records the risk tier) | No |
+| `sparkwright interview owner` | Interview the owner one question at a time → evidence | Yes ¹ |
+| `sparkwright interview ingest <file> --consent "..."` | Turn a user-interview transcript into anonymized evidence | Yes ¹ |
+| `sparkwright review <ID>` | Fresh-context Inspector swarm, merged findings, gate | Yes ¹ |
+| `sparkwright descend <ID>` | Architect drafts the next level (component or tasks) under an approved requirement | Yes ¹ |
+| `sparkwright build <task>` | Tests first, property tests for invariants, code, checks, library check, mutation, test lock, code and security review, on its own branch | Yes ¹ |
+| `sparkwright verify` | Run the project's checks from config | No |
 | `sparkwright mutate --base <rev>` | Saboteur: mutation-test the lines you changed | No |
-| `sparkwright interview owner` | Interview the owner one question at a time → evidence | Yes |
-| `sparkwright interview ingest <file> --consent "..."` | Turn a user-interview transcript into evidence | Yes |
-| `sparkwright review <ID>` | Fresh-context Inspector swarm, merged findings, gate | Yes |
+| `sparkwright change new <ID> \| apply <CR>` | Open or apply a change request when an approved spec is wrong | No |
 | `sparkwright adapt claude-code \| agents-md` | Generate host adapters | No |
+| `sparkwright guard` | PreToolUse hook used by host adapters | No |
+
+¹ Either a configured model provider (Runner mode), or a host coding agent
+that runs the agent steps itself (host mode: `--prepare`/`--collect` for
+interview, review and descend, `--next`/`--done` for build). In host mode no
+separate API key is needed.
+
+**Risk tiers.** Component and task files declare `risk: low | medium | high`.
+High-risk work always gets the Security Reviewer, in spec review and after
+code review, and always needs a human gate. Changing an artifact's risk voids
+its approvals until a human re-approves.
 
 Every command accepts `--json`.
 
@@ -81,8 +99,11 @@ such as Ollama or vLLM). API keys are read from environment variables only.
 ## Coding agents: any host
 
 - **Claude Code:** `claude plugin marketplace add kuberiva/sparkwright` then
-  `claude plugin install sparkwright@sparkwright`. Reviews run on Claude Code's
-  own subagents, so no separate API key is needed.
+  `claude plugin install sparkwright@sparkwright`. Interviews, reviews, descend
+  and builds run on Claude Code's own subagents, so no separate API key is
+  needed. A PreToolUse hook (`sparkwright guard`) stops agents from editing
+  approvals, events, locked tests or git internals. See
+  `docs/quickstart-claude-code.md`.
 - **Everything else:** `sparkwright adapt agents-md` writes a section into
   `AGENTS.md`, which most coding agents read.
 - **CI:** `sparkwright check` needs no network and no model.
