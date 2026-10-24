@@ -1,0 +1,997 @@
+{
+ "bld-01__buildability-checker": [
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'Intuitive and delightful for every member' is subjective, has no trigger or measurable response, and cannot be tested; it also violates the constitution's ban on promotional adjectives. It adds no parent coverage beyond S1.1.",
+   "fix": "Delete it, or rewrite as a measurable EARS requirement, e.g. 'When a member opens a class, the system shall let the member complete a booking in no more than 3 taps from the class detail screen.'"
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "'Every booked member' is not testable for members who have disabled push notifications or have no valid device token, and the delivery point of the 5 minutes is unclear (sent vs received).",
+   "fix": "When the studio cancels a class, the system shall send a push notification to every booked member who has push enabled within 5 minutes of the cancellation, and shall record a delivery status for each recipient."
+  }
+ ],
+ "bld-02__buildability-checker": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "The requirement does not say what happens for an ISO 8601 string with no UTC offset, and it does not say how an input with an offset is treated. Those are the two cases most likely to give a wrong class time. Both cases lack an expected output, so a test cannot be written.",
+   "fix": "Split into two EARS requirements. (a) When parse_class_time receives an ISO 8601 date-time string that includes a UTC offset or 'Z', the system shall return the same instant expressed in the studio timezone. (b) When parse_class_time receives an ISO 8601 date-time string with no offset, the system shall interpret it as local time in the studio timezone and return that datetime."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "There is no defined response for input that is not a valid ISO 8601 date-time: malformed text, a date-only string, an empty string or None. A booking flow that depends on this function would get undefined behaviour.",
+   "fix": "Add: When parse_class_time receives text that is not a valid ISO 8601 date-time, the system shall raise a ValueError (or return a defined error result) and shall not return a datetime."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "'The studio's timezone' is not defined. It is not stated which setting or entity supplies it, or what happens when several studios exist or the value is missing. The expected result cannot be asserted without that.",
+   "fix": "State the source, for example: 'the timezone named by the studio_timezone setting (an IANA name such as America/Los_Angeles)'. Add: When studio_timezone is missing or not a valid IANA name, the system shall fail with a configuration error."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C2.1.1",
+    "S1.1"
+   ],
+   "finding": "The parent S1.1 concerns reserving a spot and showing a confirmation. This requirement only covers parsing, and the link to the parent is implicit. The behaviour that makes the timezone matter for booking (for example, which class time is shown or compared) is not covered.",
+   "fix": "Add a sibling requirement tied to S1.1, for example: When a booking confirmation is shown, the system shall display the class start time in the studio timezone. Alternatively, note in C2.1.1 which S1.1 behaviour consumes the parsed value."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C2.1.1"
+   ],
+   "finding": "'ISO 8601 date-time string' covers many formats (week dates, ordinal dates, basic format without separators, fractional seconds, reduced precision). The set of accepted forms is not pinned down, so test coverage is ambiguous.",
+   "fix": "Restrict the accepted forms, for example to extended-format date-time such as YYYY-MM-DDTHH:MM[:SS[.ffffff]][Z|\u00b1HH:MM], and list one accepted example per form in the acceptance criteria."
+  }
+ ],
+ "bld-03__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C7.1.2"
+   ],
+   "finding": "\"Within a reasonable time\" is not testable; no timeout value is given, so the offer-expiry behaviour cannot be built or verified. It also does not say what happens when the next member is exhausted (end of waitlist) or when the member declines explicitly.",
+   "fix": "Rewrite: \"When an offered member has neither accepted nor declined within <N> minutes of the offer being sent, the waitlist service shall withdraw the offer and offer the spot to the next member in join order.\" Add: \"When an offered member declines, the waitlist service shall immediately offer the spot to the next member.\" Add: \"When no waitlisted member remains, the waitlist service shall release the spot as open for booking.\" Define N (or a configuration parameter with a default) in the requirement or parent S8.1."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C7.1.1"
+   ],
+   "finding": "\"First member on the waitlist\" does not state the ordering rule that parent S8.1 requires (order joined), and the requirement does not say what happens when the waitlist is empty. It also does not specify how the offer is delivered.",
+   "fix": "Rewrite: \"When a booked member cancels a booking in a full class and the waitlist is not empty, the waitlist service shall send an offer for the freed spot to the member with the earliest join timestamp on that class's waitlist.\" Add: \"When a booked member cancels and the waitlist is empty, the waitlist service shall mark the spot as available for booking.\""
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C7.1.1",
+    "C7.1.2"
+   ],
+   "finding": "Parent S8.1 is triggered by a spot freeing up in a full class (any cause); the children cover only member cancellation. Other ways a spot frees up (staff removal, class capacity increase) have no coverage. The behaviour of an offered spot while pending (held, or open to others) and the acceptance step (booking the member and removing them from the waitlist) are also unspecified.",
+   "fix": "Change the C7.1.1 trigger to \"When a spot becomes free in a full class\" or add sibling requirements for the other triggers. Add: \"While an offer is pending, the waitlist service shall hold the spot and not make it bookable by other members.\" Add: \"When an offered member accepts within the offer window, the waitlist service shall book the member into the class and remove them from the waitlist.\""
+  }
+ ],
+ "clean-01__buildability-checker": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C4.1.1"
+   ],
+   "finding": "The requirement does not say what happens to seconds and microseconds, so 07:05:59 could validly give 07:05 or 07:06 and a test cannot decide which is correct.",
+   "fix": "When format_time(dt) receives a timezone-aware datetime, the system shall return HH:MM with seconds and microseconds truncated, not rounded (for example 07:05:59 returns 07:05)."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.1",
+    "C4.1.2"
+   ],
+   "finding": "'Timezone-aware' and 'naive' are not defined for a datetime whose tzinfo is set but whose utcoffset() returns None. Such a value is naive under Python's own definition, but neither requirement says which branch it takes.",
+   "fix": "When format_time receives a datetime whose tzinfo is None or whose tzinfo.utcoffset(dt) returns None, the system shall raise TypeError with the message `format_time needs a timezone-aware datetime`."
+  }
+ ],
+ "clean-01__contradiction-hunter": [],
+ "clean-01__coverage-auditor": [
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.1",
+    "C4.1.2"
+   ],
+   "finding": "\"Timezone-aware\" is not defined. A datetime with tzinfo set whose utcoffset() returns None is ambiguous between C4.1.1 (format) and C4.1.2 (reject), which leaves the parent's \"reject times without a timezone\" partly untestable at the edge.",
+   "fix": "Define aware as tzinfo is not None and utcoffset() is not None, and state that any other datetime is treated as naive under C4.1.2."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.2"
+   ],
+   "finding": "The clause \"any value that is not a datetime\" is not asked for by S3.1, which only covers times without a timezone. It adds input-type validation that no parent requested.",
+   "fix": "Either keep it as a documented defensive-programming extension traceable to S3.1, or limit C4.1.2 to naive datetimes and leave non-datetime input unspecified."
+  }
+ ],
+ "clean-01__devils-advocate": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C4.1.1",
+    "C4.1.2"
+   ],
+   "finding": "'Timezone-aware' is not defined. A datetime with a tzinfo whose utcoffset() returns None is treated as naive by Python, so C4.1.1 and C4.1.2 can both appear to apply or neither, and the accept/reject boundary is untestable.",
+   "fix": "Define aware as dt.tzinfo is not None and dt.utcoffset() is not None, and state that anything else is naive and rejected under C4.1.2."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C4.1.1"
+   ],
+   "finding": "The requirement does not say what happens to seconds and microseconds. Truncation and rounding give different output, and rounding can produce 24:00 or change the date, so implementers will diverge.",
+   "fix": "Add that seconds and microseconds are truncated, never rounded (for example 07:05:59 returns 07:05), and add a test for it."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.2"
+   ],
+   "finding": "One requirement and one fixed message cover two different failures: a naive datetime, which is a bad value, and a non-datetime, which is a bad type. TypeError for a naive datetime is also a contract that callers will depend on, and ValueError is the usual choice for a bad value. The message is misleading for non-datetime input.",
+   "fix": "Split it into two requirements: non-datetime raises TypeError, and naive datetime raises ValueError. Give each its own message, and fix the choice of exception type now because it is a public contract."
+  }
+ ],
+ "clean-01__newcomer": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C4.1.1"
+   ],
+   "finding": "The handling of seconds and microseconds is not defined. An input such as 07:05:59 could be truncated to 07:05 or rounded to 07:06, and the requirement does not say which, so the core output is not testable at the boundary.",
+   "fix": "State that seconds and microseconds are discarded without rounding, and add an example such as 07:05:59.999 -> 07:05."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C4.1.1",
+    "C4.1.2"
+   ],
+   "finding": "'Timezone-aware' and 'naive' are not defined. A datetime with tzinfo set whose utcoffset() returns None is naive under Python's own definition, but the text does not say which test is used. The two requirements could therefore classify the same input differently.",
+   "fix": "Define aware as dt.tzinfo is not None and dt.tzinfo.utcoffset(dt) is not None, and naive as everything else. Add a test case for a tzinfo whose utcoffset returns None."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.2"
+   ],
+   "finding": "Behaviour for subclasses of datetime, such as pandas.Timestamp, is not specified. Non-datetime values that are date-like, such as a plain date, are covered only by the phrase 'any value that is not a datetime'.",
+   "fix": "Say explicitly that datetime subclasses are accepted and treated as datetimes, and that plain date objects and None raise TypeError."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C4.1.1"
+   ],
+   "finding": "'24-hour form' does not say how midnight is shown. 00:00 and 24:00 are both conventional, and the examples do not include midnight.",
+   "fix": "Add midnight as an example (00:00) and state that hours range from 00 to 23."
+  }
+ ],
+ "clean-01__security-reviewer": [],
+ "clean-02__buildability-checker": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "Not in EARS form (no trigger) and 'in call order' is undefined for truly concurrent calls, so the ordering part cannot be tested; only the 'no lost update' outcome is testable.",
+   "fix": "Rewrite: 'When N calls to `spend` or `refund` for the same member_id are made concurrently, the wallet shall leave the balance equal to the starting balance minus the number of successful `spend` calls plus the number of `refund` calls.' Drop 'in call order'."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.1",
+    "C5.1.2",
+    "C5.1.3"
+   ],
+   "finding": "Behaviour for an unknown member_id is not specified for `spend`, `refund` or `balance`, so a builder must guess between raising an error and creating a wallet.",
+   "fix": "Add: 'When `spend`, `refund` or `balance` is called with a member_id that has no wallet, the wallet shall raise `UnknownMember` and change no balance.'"
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.3"
+   ],
+   "finding": "`refund` is unconditional, so a repeated call for the same cancellation would add a credit each time; S4.2 returns one credit per booked member.",
+   "fix": "State whether duplicate refunds are the caller's responsibility, or add an EARS requirement keyed to a booking identifier so a second refund for the same booking is rejected."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.1"
+   ],
+   "finding": "`Wallet.balance` appears in the Interfaces section but no requirement states what it returns, so it has no test.",
+   "fix": "Add: 'When `balance(member_id)` is called, the wallet shall return the member's current credit count as an integer of at least 0.'"
+  }
+ ],
+ "clean-02__contradiction-hunter": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "The requirement says calls are applied 'in call order' while also covering 'concurrent calls', but concurrent calls have no defined order. The 'never lose an update' clause is the testable part; the ordering clause is not.",
+   "fix": "Reword: 'When spend or refund calls on the same member overlap in time, the wallet shall apply them serially in some order such that the final balance equals the starting balance minus successful spends plus refunds.'"
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.3",
+    "S4.2"
+   ],
+   "finding": "S4.2 returns one credit per booked member for a cancelled class, but refund(member_id) carries no booking or class reference and C5.1.3 adds 1 on every call. A retried or duplicated cancellation would refund the same booking twice, and nothing in C5 prevents it.",
+   "fix": "Either add a booking/class identifier to refund and require that a repeat refund for the same booking leaves the balance unchanged, or state that deduplication is the caller's responsibility and trace that to a requirement at the booking component."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "Interfaces",
+    "C5.1.1",
+    "C5.1.2",
+    "C5.1.3"
+   ],
+   "finding": "Behaviour for an unknown member_id is not defined for balance, spend or refund. The interface also does not say that NoCredit is the only error.",
+   "fix": "Add a requirement for unknown member_id (for example raise UnknownMember with no state change)."
+  }
+ ],
+ "clean-02__coverage-auditor": [
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "The serialisation and concurrency requirement is not asked for by S4.1 or S4.2, which say nothing about concurrent calls, so the cited parents do not directly justify it.",
+   "fix": "Add a parent system requirement for concurrent-booking safety (for example, no credit is lost or double-spent under simultaneous bookings) and cite it, or state in C5.1.4 that it is derived from S4.1's refusal-when-no-credit clause."
+  }
+ ],
+ "clean-02__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "C5.1.3"
+   ],
+   "finding": "refund(member_id) carries no booking or transaction identifier and is not idempotent, so a retried or duplicated studio-cancel call credits the member twice, and a refund can be issued for a credit that was never spent. Balance corruption of this kind is hard to detect and expensive to repair once ledgers drift.",
+   "fix": "Change the interface to spend(member_id, booking_id) and refund(member_id, booking_id), and require that a refund increases the balance by 1 only when a prior spend for that booking_id exists and has not already been refunded; otherwise it leaves the balance unchanged."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "The requirement says calls are applied 'in call order' while also speaking of 'concurrent' calls, but concurrent calls have no defined order, and 'never lose an update' is not tied to an observable test. Two concurrent spends at balance 1 must yield exactly one success and one NoCredit, which the text does not state.",
+   "fix": "Reword as: each spend or refund for a member shall take effect atomically, so that after N concurrent operations the final balance equals the starting balance minus the successful spends plus the refunds, and the balance never goes below 0. Add a concurrent-spend-at-balance-1 case as the acceptance test."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.1",
+    "C5.1.2",
+    "C5.1.3"
+   ],
+   "finding": "Behaviour for an unknown member_id is not specified for spend, refund or balance, and balance() has no requirement at all. An implementation could silently create accounts, raise an arbitrary error, or return 0, and S4.1 would then grant or refuse bookings inconsistently.",
+   "fix": "Add requirements: balance(member_id) returns the current balance; spend, refund and balance on a member_id with no wallet raise a named error (for example UnknownMember) and change no state."
+  }
+ ],
+ "clean-02__newcomer": [
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "\"In call order\" is undefined for truly concurrent calls (there is no defined order), and the requirement is not in EARS form (no trigger or condition). Scope is also unclear: one process, multiple processes, or multiple service instances sharing a store.",
+   "fix": "Reword in EARS form, e.g. \"When two or more spend or refund calls for the same member overlap in time, the wallet shall apply them serially so that the final balance equals the starting balance minus successful spends plus refunds.\" State the scope (single store, all instances) and give a testable check such as N parallel spends against a balance of M yield exactly min(N, M) successes."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.3"
+   ],
+   "finding": "Nothing limits or deduplicates refunds. If the studio cancel is retried or a member is refunded twice for one booking, the balance grows without bound. It is unclear whether the wallet or the caller must guarantee one refund per booking, and the signature carries no booking reference.",
+   "fix": "Either state that the wallet performs no deduplication and the caller guarantees at-most-once refund per booking (and say which component owns that), or add a booking_id argument and require that a repeated refund for the same booking leaves the balance unchanged."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C5.1.1",
+    "C5.1.2",
+    "C5.1.3"
+   ],
+   "finding": "Behaviour for an unknown or invalid member_id is unspecified for spend, refund and balance (raise, create an account with 0, or silently succeed). refund has no stated error behaviour at all, and the Interfaces section says only spend raises.",
+   "fix": "Add requirements for an unknown member_id (e.g. raise `UnknownMember` from all three operations) and for refund failure, and list the exceptions in Interfaces."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.1"
+   ],
+   "finding": "`Wallet.balance` appears in Interfaces but no requirement defines what it returns or when. The source of initial or purchased credits is also not covered, so the initial balance of a new member is undefined.",
+   "fix": "Add a requirement such as \"When balance(member_id) is called, the wallet shall return the current non-negative integer balance\", and state the initial balance or point to the component that grants credits."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.2"
+   ],
+   "finding": "\"Leave the balance at 0\" combined with the invariant that the balance is never negative is implied only; there is no explicit non-negativity requirement, and failure atomicity under concurrency (a rejected spend must not briefly make the balance negative) is not stated.",
+   "fix": "Add an invariant requirement that the balance is never less than 0 at any observable moment."
+  }
+ ],
+ "clean-02__security-reviewer": [
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.3"
+   ],
+   "finding": "refund takes only member_id, so a repeated call for the same cancellation adds a credit each time, and nothing limits who may call refund or spend. A duplicate or unauthorised call could mint credits.",
+   "fix": "Add a requirement that refund and spend are callable only by the booking and cancellation components, and decide at the next level whether refund carries a booking reference so a repeat refund for the same booking is ignored."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C5.1.4"
+   ],
+   "finding": "\"in call order\" is undefined for truly concurrent calls, which makes the requirement hard to test as written.",
+   "fix": "Reword to: when calls on the same member overlap, the wallet shall give the same final balance as some sequential execution of those calls."
+  }
+ ],
+ "clean-03__buildability-checker": [
+  {
+   "severity": "low",
+   "ids": [
+    "V2"
+   ],
+   "finding": "\"Notify\" names no channel and no time bound, so a tester cannot decide when the requirement is met. Evidence Q2 shows the pain is the hour spent phoning members.",
+   "fix": "When the studio cancels a class, the app shall deliver a cancellation notification to every member booked on that class within 1 minute of the cancellation."
+  }
+ ],
+ "clean-03__contradiction-hunter": [],
+ "clean-03__coverage-auditor": [
+  {
+   "severity": "low",
+   "ids": [
+    "V2"
+   ],
+   "finding": "E1 Q2 describes the pain as cancellation notification taking up to an hour, but V2 sets no timeliness expectation, so the 'takes up to an hour' problem is only nominally addressed and the requirement is hard to test for that outcome.",
+   "fix": "Add a time bound at an appropriate level, for example 'shall notify every booked member within 5 minutes of the cancellation', or note that timing is deferred to the System level."
+  }
+ ],
+ "clean-03__devils-advocate": [
+  {
+   "severity": "medium",
+   "ids": [
+    "V2"
+   ],
+   "finding": "V2 does not say how or how fast members are notified. 'Notify' inside the app only reaches members who open it, while Q2 shows the real problem is reaching members before they travel to a cancelled class. With no channel or time bound, the requirement is not testable as the constitution demands.",
+   "fix": "Reword V2 to name the channel and a time bound, e.g. 'When a class is cancelled by the studio, the app shall send a push notification to every booked member within 1 minute of the cancellation.' Add a fallback for members with notifications disabled."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "V1"
+   ],
+   "finding": "V1 covers only a successful booking. Q1 shows members phone the desk because they are unsure whether a booking went through, and that uncertainty is greatest when a booking fails, times out or is rejected (e.g. class full). With no failure outcome, the ambiguity that drives the phone calls remains.",
+   "fix": "Add a requirement: 'If a booking cannot be completed, the app shall tell the member that the booking failed and why.' Also add a time bound to V1, e.g. 'within 5 seconds of the member's request'."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "V1",
+    "V2"
+   ],
+   "finding": "Both requirements are scoped to the studio-initiated flow and a single booking action. Member-initiated cancellation and bookings the member can check later are not covered, so the desk-call driver in Q1 is only partly addressed.",
+   "fix": "Add a requirement that a member can view the current status of their bookings in the app, or record in the non-goals that this is out of scope."
+  }
+ ],
+ "clean-03__newcomer": [
+  {
+   "severity": "medium",
+   "ids": [
+    "V2"
+   ],
+   "finding": "\"Notify\" does not say by what channel (push, in-app, email, SMS) or how soon after the cancellation. Q2 is about phoning members, so a member without the app or with notifications off is not covered, and the requirement cannot be tested as written.",
+   "fix": "State the channel(s) at vision level and a delivery bound, e.g. \"within 5 minutes of the cancellation\". Say what happens when a member cannot be reached through the app."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "V1"
+   ],
+   "finding": "Q1 is about members not knowing whether a booking \"went through\", but V1 only covers the success case. It does not say what the member sees when the booking fails, for example because the class is full. \"Within the app\" also has no time bound, so \"confirm\" is hard to test.",
+   "fix": "Add a requirement for the failure outcome (the member is told the booking was not made). Give V1 a response bound, e.g. \"within 5 seconds\"."
+  }
+ ],
+ "clean-03__security-reviewer": [],
+ "con-01__contradiction-hunter": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2",
+    "S2.1"
+   ],
+   "finding": "S1.2 refuses any member cancellation less than 24 hours before class, while S2.1 requires releasing the spot and refunding the credit for a cancellation at any time before the class starts. Both cannot hold for a cancellation made, for example, 2 hours before class.",
+   "fix": "Make the rules consistent: either change S2.1 to 'at least 24 hours before the class starts' (and say what happens inside 24 hours), or remove the refusal in S1.2. Also state whether the credit is refunded for a late cancellation."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.2",
+    "V2"
+   ],
+   "finding": "S2.2 specifies push notification as the only channel, while parent V2 requires only that the app notify booked members. Members without push enabled or permitted would not be notified, and S2.2 does not define that case, so the parent requirement is only partly covered.",
+   "fix": "Add a fallback requirement, such as an in-app notification when push is unavailable or declined, or reword S2.2 to cover notification by any available channel."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1",
+    "V1"
+   ],
+   "finding": "S1.1 says the system 'shall reserve a spot' but does not say what happens when the class is full or becomes full during booking. 'Open class' is not defined, so the 'open' condition cannot be tested.",
+   "fix": "Define 'open class' (for example, a class with at least one unreserved spot, not yet started) and add a requirement for the full-class case."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 gives no behaviour for a cancellation made exactly 24 hours before the class. 'Less than 24 hours' leaves the boundary to the reader, which weakens testability.",
+   "fix": "State the boundary explicitly, for example 'fewer than 24 hours' versus 'at or more than 24 hours', and add a test-oriented example."
+  }
+ ],
+ "con-02__contradiction-hunter": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "C1.1.3"
+   ],
+   "finding": "C1.1.1 sets class capacity to 20 spots, but C1.1.3 rejects a booking as full only when a class already has 30 bookings. Bookings 21 to 30 would be accepted even though capacity is 20, so the two requirements cannot both hold.",
+   "fix": "Use one capacity value. Rewrite C1.1.3 as: 'When a class already has a number of bookings equal to its capacity, the system shall reject a new booking as full; otherwise it shall accept the booking.' This also removes the hard-coded 30."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.3"
+   ],
+   "finding": "C1.1.3 is not in EARS form. It uses a compound 'when ... rejected; with fewer, accepted' structure whose second clause has no trigger. It also does not say what 'rejected as full' returns, so the rejection cannot be tested precisely.",
+   "fix": "Split into two EARS requirements: one for accepting a booking when bookings are below capacity, and one for rejecting it when bookings equal capacity. State the observable outcome of rejection, such as a 'class full' error returned and no booking stored."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1",
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "The parent S1.1 requires the system to show a confirmation screen after a successful booking. No C1 requirement covers the confirmation, or the booking-time check that the class is open. The 'open class' precondition is also undefined in C1.",
+   "fix": "Add a requirement that a successful booking returns a confirmation result for the UI, or point to the component that owns the confirmation screen. Add a requirement that rejects bookings on classes that are not open, and define 'open'."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "C1.1.1 fixes capacity at 20 for every class and gives no way to set a different capacity. The 'When a class is created' trigger also does not say which component creates the class. It is unclear whether capacity is a fixed default or a configurable value.",
+   "fix": "State whether 20 is a default that can be overridden, and name the owner of class creation, or reference the requirement that defines it."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.2",
+    "C1.1.3"
+   ],
+   "finding": "Nothing handles a member booking the same class twice, or two members booking the last spot at the same time. The capacity check in C1.1.3 could be exceeded under concurrent bookings.",
+   "fix": "Add a requirement that a duplicate booking by the same member is rejected. Add a requirement that the capacity check and the booking store are atomic."
+  }
+ ],
+ "con-03__contradiction-hunter": [
+  {
+   "severity": "high",
+   "ids": [
+    "C6.1.2",
+    "C6.1.1",
+    "S5.1"
+   ],
+   "finding": "C6.1.1 stores start times as UTC and C6.1.2 displays them 'as stored', so the screen shows UTC times. Parent S5.1 requires the studio's local time, so C6.1.2 undermines the parent requirement and would show wrong times to members.",
+   "fix": "Rewrite C6.1.2 as: 'When the schedule screen lists classes, it shall convert each stored UTC start time to the studio's local time and format it HH:MM.' Define where the studio's timezone comes from (for example a per-studio timezone setting)."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C6.1.2",
+    "S5.1"
+   ],
+   "finding": "The studio timezone is referenced by S5.1 but no component requirement defines how it is stored or obtained. Daylight saving transitions are also unspecified, so the local-time conversion cannot be tested.",
+   "fix": "Add a requirement that the schedule service shall store an IANA timezone identifier per studio. Add a testable requirement that conversion applies the studio's daylight saving rules."
+  }
+ ],
+ "cov-01__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 (waitlist option when a class is full) cites V1, but V1 only requires confirming a booking within the app. No parent asks for a waitlist, so this is invented scope with an invalid trace.",
+   "fix": "Remove S1.2, or add a parent requirement in the vision (and its epic) that calls for a waitlist and cite that ID. If waitlisting is wanted, also define what happens when a spot opens."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "V2 (notify every booked member when the studio cancels a class) is not covered by any requirement, and no requirement cites it. The system spec has no cancellation-notification behaviour, so a parent requirement is left untraced.",
+   "fix": "Add a requirement such as 'S1.3 [V2] When the studio cancels a class, the system shall send a notification to every member with a booking for that class.' Or record explicitly that V2 is deferred to another spec."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "V1 requires confirmation of the booking. S1.1 requires reserving a spot and showing a confirmation screen when the member taps Book, but it does not say whether the confirmation is shown only after the reservation succeeds. A failed reservation could still show a confirmation, which is testable only ambiguously.",
+   "fix": "Reword to 'When a member taps Book on an open class and the reservation succeeds, the system shall reserve a spot and show a confirmation screen within the app.' Add a requirement for the failure case if it is in scope."
+  }
+ ],
+ "cov-02__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "S1.3 awards loyalty points after 10 attended classes, redeemable for merchandise. No parent requirement (V1 covers booking confirmation) asks for a loyalty or merchandise feature, so this is invented scope. It also cites V1, which is the wrong parent for it.",
+   "fix": "Remove S1.3 from this spec, or add a loyalty requirement to the vision and the parent epic first, then re-derive S1.3 from that new parent ID."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "V1 requires confirmation of the booking within the app. S1.1 says to reserve a spot and show a confirmation screen, but sets no timing. V1 itself is also unbounded, so the confirmation behaviour cannot be tested, and the 'within the app' clause is only implied.",
+   "fix": "Restate S1.1 as: 'When a member taps Book on an open class, the system shall reserve a spot and display an in-app booking confirmation within N seconds.' Choose N with the parent owner."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "S1.2 adds a 5-minute deadline and specifies push notifications. V2 only asks that every booked member be notified, so these details go beyond the parent. They are reasonable refinements, but the parent never approved them.",
+   "fix": "Confirm the 5-minute limit and the push channel with the V2 owner, or record them in V2 so the trace is complete."
+  }
+ ],
+ "cov-03__coverage-auditor": [
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "S2.1 requires notification when a class is cancelled or moved to another time, but C3.1.1 covers only cancellation (notify_cancellation). No requirement handles rescheduled classes.",
+   "fix": "Add a requirement: When the studio moves a class to another time, the notifier shall send one push message to each member with an active booking on that class. Or widen C3.1.1 to cover both cancellation and reschedule."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1",
+    "C3.1.2"
+   ],
+   "finding": "S2.1 requires every booked member to be notified within 5 minutes. Neither requirement states this time bound, so the core timing clause is uncovered and untestable. The retry schedule in C3.1.2 is not tied to it.",
+   "fix": "Add to C3.1.1: '...within 5 minutes of the cancellation or move being recorded'. State that the retry schedule in C3.1.2 completes within that window, or say that the 5-minute bound applies to the first attempt only."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "S2.1 requires the message to state what changed (cancelled, or the new time). C3.1.1 does not specify the message content, so this clause is uncovered.",
+   "fix": "Add: 'The push message shall state that the class was cancelled or moved and, for a move, the new date and time.'"
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C3.1.2"
+   ],
+   "finding": "Retry count, 1-minute interval and failure logging are not asked for by S2.1, so they add scope. Parent S2.1 says 'every member' and gives no failure-handling or logging requirement. 'A push message fails' is also undefined (error response, timeout?).",
+   "fix": "Either add a parent requirement for delivery failure handling, or cite it as a derived requirement. Define what counts as a failure."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C3.1.1"
+   ],
+   "finding": "The trigger names an implementation function, notify_cancellation(class_id), which is detail below the level of a requirement tracing to a system spec. 'Active booking' is also undefined.",
+   "fix": "Phrase the trigger as the event (class cancelled or moved) and define 'active booking' (for example, confirmed and not cancelled by the member)."
+  }
+ ],
+ "dev-01__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Confirmation is hard-wired to a single synchronous call to one named partner API (PayFast), with no timeout, failure, or retry behaviour. Any PayFast slowness or outage blocks every booking, and the requirement is untestable for the failure paths. It also dictates implementation and introduces a payment dependency the parent V1 never mentions.",
+   "fix": "Rewrite as an EARS requirement stating the outcome: 'When the member taps Book, the system shall show confirmed or failed within N seconds.' Add 'If the payment provider does not respond within N seconds, the system shall release the reserved spot and show a retry option.' Move the provider choice and the sync/async decision to a lower level or an ADR, and add a parent requirement covering payment if payment is intended."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "S1.1 reserves a spot and shows confirmation on tap, while S1.2 makes confirmation wait on PayFast. The order of reserve, pay and confirm is contradictory, and nothing says what happens to the reserved spot on decline, timeout or double tap. This risks overbooking, ghost reservations, or double charges.",
+   "fix": "Define one booking state machine in the spec: reserve (held with an expiry), then payment result, then confirmed or released. State that a duplicate tap on the same class is idempotent. Make the confirmation screen appear only on the confirmed state."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S2.1"
+   ],
+   "finding": "The requirement has no behaviour for members who have push disabled, uninstalled the app or have an invalid token, and says nothing about a failed delivery. 'Every booked member within 5 minutes' cannot be verified when delivery depends on third-party push services, and it leaves the parent's 'notify every booked member' unmet for those members. Waitlisted or late-cancelling members are also undefined.",
+   "fix": "Split into two requirements. First: 'the system shall send a push request for every booked member within 5 minutes of cancellation', which is measurable. Second: 'If push delivery fails or is disabled, the system shall notify the member by in-app message or email fallback.' Define 'booked member' as holding a confirmed booking at the time of cancellation."
+  }
+ ],
+ "dev-02__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "V1"
+   ],
+   "finding": "The $40/month price is stated as a requirement but is not supported by E1. Q1 only says one studio owner said members sometimes forget classes, which says nothing about willingness to pay, price level, or that members want reminders. The 'because' clause also overstates the evidence ('studios report', plural; 'want booking reminders'). Pricing is expensive to reverse once subscribers are acquired.",
+   "fix": "Remove the fixed price from the requirement, or mark it as an assumption to validate, for example with a pricing test. Restate the need as supported by Q1: 'Where a member has a booked class, the app shall send a reminder before the class start time.' Gather evidence on willingness to pay before fixing a price."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "V1"
+   ],
+   "finding": "V1 is not in EARS form and is not testable. 'Members shall pay' describes member behaviour, not system behaviour, and the rationale is embedded in the requirement text. The constitution requires EARS form and testability for every requirement. The reminder behaviour it implies is not specified at all (timing, channel, opt-out).",
+   "fix": "Split it into a system behaviour requirement, such as 'When a member's booked class is N hours away, the app shall send the member a reminder', and a separate, evidence-backed commercial constraint. Keep the rationale in the evidence link and out of the requirement text."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "V2"
+   ],
+   "finding": "V2 cites E1, but E1 says nothing about studio cancellations or notifications, so it has no evidence basis. It is also under-specified: 'notify' has no channel, latency bound, or handling for members who cancelled or were waitlisted, so 'every booked member' cannot be tested precisely.",
+   "fix": "Add evidence for cancellation notifications or flag V2 as an assumption. Specify the behaviour, for example 'When a studio cancels a class, the app shall send a push notification to each member with a confirmed booking within 5 minutes', and state the fallback if push is disabled."
+  }
+ ],
+ "dev-03__devils-advocate": [
+  {
+   "severity": "high",
+   "ids": [
+    "S7.1"
+   ],
+   "finding": "A single SQLite file on a front-desk PC, read and written by the mobile app over the internet, makes one consumer PC the sole datastore and availability point, and SQLite has no network access or safe concurrent multi-client write path. It also prescribes the implementation and exposes member data on a PC, and the choice is costly to reverse once data and clients depend on it.",
+   "fix": "Restate S7.1 as a behavioural requirement, such as 'The system shall persist bookings, members and schedules durably and make them available to the mobile app when the front-desk PC is offline', and move the storage choice to a design level. State availability, concurrency and member-data protection targets."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S7.2"
+   ],
+   "finding": "S7.2 does not define what happens when two members tap Book on the last free spot at once, or when the reservation fails. 'Free spot' is not tied to a capacity count, and the confirmation screen can appear before the reservation is durably stored, so overbooking is possible and the requirement is not testable. The single-PC storage in S7.1 makes this worse.",
+   "fix": "Add an atomic-reservation requirement: 'When two or more members book the last free spot, the system shall reserve it for exactly one and tell the others the class is full.' Also add: 'The system shall show the confirmation screen only after the reservation is stored, and shall show an error if the reservation fails.'"
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S7.3"
+   ],
+   "finding": "S7.3 requires a push notification within 5 minutes, but nothing says which device tokens are stored, what happens to members who have disabled notifications or have no token, or whether delivery or only sending is measured. The 5-minute bound also depends on the front-desk PC being online (S7.1), so the requirement cannot be verified as written.",
+   "fix": "Define the measured event, for example 'the system shall hand the notification to the push provider within 5 minutes of the cancellation being recorded'. Add a fallback for members who cannot receive push, such as an in-app or email notice, and state that notification does not depend on the front-desk PC being reachable."
+  }
+ ],
+ "new-01__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "FOB, PQ, LMS, CX and 'fan out' are undefined acronyms/terms; the spec does not say what a FOB is (booking?), what the PQ is (queue?), or what the LMS is, so an implementer cannot build or test either requirement.",
+   "fix": "Add a glossary defining FOB, PQ, LMS, CX, 'FOB holder' and 'fan out', or replace the acronyms with plain terms (e.g. 'confirmed booking', 'notification queue', 'class management system', 'cancellation event')."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "Parent V1 requires the app to confirm the booking to the member within the app, but S1.1 only writes to the PQ and syncs the LMS; no member-visible in-app confirmation is specified, so parent coverage is missing.",
+   "fix": "Add a requirement (or extend S1.1) such as 'When a FOB is confirmed, the system shall present a booking confirmation to the member in the studio app within N seconds.'"
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Parent V2 requires every booked member to be notified of a studio cancellation, but S1.2 only fans out over the PQ; delivery of a notification to the member (channel, content) is not stated, and 'LMS flags a CX event' is not tied to a cancellation by the studio.",
+   "fix": "State that the system shall deliver a cancellation notification to each booked member via the app, name the channel(s), and define the CX event as a studio-initiated class cancellation."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "No timing, success criteria or measurable thresholds, so the requirements are not testable per the constitution (what counts as 'confirmed', 'synced', 'all' holders reached).",
+   "fix": "Add response-time bounds and completion criteria, e.g. 'within 5 seconds' and 'including 100% of members with an active booking at the time of the event'."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.1",
+    "S1.2"
+   ],
+   "finding": "Error behaviour is unspecified: what happens if the PQ write fails, the LMS sync fails or is partial, a fan-out delivery fails for some holders, or the event is received twice (idempotency/ordering).",
+   "fix": "Add requirements for failure handling: retry policy, no duplicate notifications, behaviour when the LMS is unavailable, and how partial delivery is reported."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "S1.1 combines two actions (write to PQ and sync LMS) in one requirement and does not specify order or whether sync depends on the write, hindering one-to-one testing.",
+   "fix": "Split into two EARS requirements or specify the sequence and dependency."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "'All FOB holders' is ambiguous: it is unclear whether it includes waitlisted, already-cancelled or past members of the class.",
+   "fix": "Define the set precisely, e.g. 'every member with a confirmed booking for the cancelled class'."
+  }
+ ],
+ "new-02__buildability-checker": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "The requirement cannot be tested as written. 'it', 'the other one', 'the record', 'synced' and 'done' have no referent, and the trigger does not name an event, a system or a target of the sync.",
+   "fix": "Rewrite with named actors, for example: 'When a booking record is created or changed, the booking service shall update <named target, e.g. the member's schedule view> within <N> seconds and set the booking status to confirmed.' Define 'synced' and 'done' as observable states, and split the sync and the status change into separate requirements."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1",
+    "S1.1"
+   ],
+   "finding": "C1.2.1 claims to trace to S1.1 (reserve a spot, show confirmation), but nothing in its text relates to reserving a spot or confirming. Its trace link is unsupported.",
+   "fix": "Either re-parent C1.2.1 to the system requirement it actually serves, or rewrite it so it states how it contributes to the S1.1 reservation and confirmation behaviour."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1",
+    "S1.1"
+   ],
+   "finding": "S1.1 requires a confirmation screen, but no component requirement covers it, so the parent is only partly covered. C1.1.1 also leaves out the outcome the member sees when the last free spot is taken concurrently.",
+   "fix": "Add: 'When the booking record is created, the booking service shall return a confirmation containing the class, time and booking ID so the client can show the confirmation screen.' Add: 'When two members book the last free spot at once, the booking service shall create exactly one booking and reject the other with a class-full response.'"
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "'Free spot' and 'free spots' are not defined. The requirement does not say whether the record creation and the decrement must succeed or fail together, or what happens when the decrement fails.",
+   "fix": "Rewrite: 'When a member books a class whose free-spot count is greater than 0, the booking service shall, in one atomic operation, create a booking record with status confirmed and reduce the free-spot count by 1.' Add: 'If either step fails, the booking service shall make no change and return an error.'"
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.1.1",
+    "C1.2.1"
+   ],
+   "finding": "The IDs are inconsistent. C1.1.1 and C1.2.1 imply different parent groupings, yet both trace to the same parent S1.1.",
+   "fix": "Renumber the requirements sequentially per parent, for example C1.1.1, C1.1.2, C1.1.3 under S1.1."
+  }
+ ],
+ "new-02__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "The requirement uses unresolved pronouns ('it', 'the other one', 'the record') with no antecedent. It does not say which record is synced, with what, or what change triggers it, so it cannot be implemented or tested.",
+   "fix": "Rewrite with named entities, e.g. 'When the class's free-spot count changes, the booking service shall update <named record/system> within <N> seconds.' State the sync source, target and trigger."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "'Marked done' is undefined: it gives no field, no state value, and no statement of what is done. The trigger 'when it is updated after the other one changes' is not a verifiable EARS event, and no timing or failure behaviour is given.",
+   "fix": "Define the status field and its value (e.g. booking.status = 'synced'), the exact event that sets it, and what happens if the sync fails (retry, error state)."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "The parent S1.1 is about reserving a spot and showing a confirmation. C1.2.1 describes syncing and marking done, which does not trace to S1.1, so the parent link looks wrong or the parent coverage is missing.",
+   "fix": "Re-link C1.2.1 to the correct parent requirement, or add a parent requirement covering sync, and say why it is needed."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "Concurrency and atomicity are unspecified. Two members booking the last free spot at the same moment could both succeed and drive free spots negative (overbooking). It is also unclear whether the record creation and the decrement succeed or fail together.",
+   "fix": "Add a requirement that the check, record creation and decrement are atomic and that free spots never go below zero. State which booking is rejected when two members compete for the last spot."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "There is no behaviour for the failure paths: a class with no free spots, a duplicate booking by the same member, a cancelled or past class, and a failed write. The parent S1.1 also requires a confirmation screen, which no component requirement covers.",
+   "fix": "Add requirements for the full-class and duplicate cases (rejection and the error returned) and for write failure. Add or reference a requirement that returns the data needed for the confirmation response."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "C1.1.1"
+   ],
+   "finding": "The booking record has no defined fields, such as member id, class id, timestamp or status, and no id format. 'Free spot' and 'member' are not defined, for example whether waitlisted or suspended members may book.",
+   "fix": "Define the booking record schema and a member eligibility rule, or reference the data model. Add an example, e.g. a class with 3 free spots becomes 2 after one booking."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "C1.2.1"
+   ],
+   "finding": "The requirement has no timing or measurable acceptance criterion, so its test would be subjective.",
+   "fix": "Add a measurable bound such as 'within 5 seconds' and an observable outcome to assert."
+  }
+ ],
+ "new-03__newcomer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S6.1"
+   ],
+   "finding": "S6.1 traces to V1, which is about confirming a class booking in the app. Exporting a member list is unrelated to V1, so the requirement has no valid parent and its purpose is not covered by any vision requirement.",
+   "fix": "Re-parent S6.1 to a vision requirement about admin member-data export, or add one to vision.md. If the export is out of scope, remove S6.1."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S6.1"
+   ],
+   "finding": "\"Standard export format\" is undefined: the file type (CSV, XLSX, JSON), columns, encoding, and delimiter are all unstated. Nobody can build it or test it against a stated format.",
+   "fix": "Name the format and the fields, for example: \"CSV, UTF-8, columns member_id, name, email, membership_status, joined_date\". Alternatively reference a defined spec by ID."
+  },
+  {
+   "severity": "high",
+   "ids": [
+    "S6.1"
+   ],
+   "finding": "The requirement emails a file of member personal data, with no statement on authorization, recipient address, or delivery safety. It does not say whether \"studio admin\" is a verified role, which address is used, or whether the attachment is protected or sent as an expiring link. This is a data-exposure risk.",
+   "fix": "Add: send only to the admin's verified account email; restrict Export to authenticated users with the admin role; deliver as an expiring link or encrypted attachment; log each export."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S6.1"
+   ],
+   "finding": "There is no timing bound and no failure behaviour. It is unclear what happens with a large member list, an email delivery failure, an admin with no email on file, or an export that would exceed the email size limit. This makes the requirement untestable under the constitution.",
+   "fix": "Add a delivery deadline (for example, within 10 minutes) and an error requirement (for example, if generation or delivery fails, the system shall show the admin an error and shall not report success). Specify the behaviour above a size limit."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S6.1"
+   ],
+   "finding": "\"Member list\" is ambiguous. It does not say whether it covers all members or only active ones, whether it is per studio or across studios, or whether it includes lapsed or deleted members.",
+   "fix": "Define the scope, for example: \"all members of the admin's studio with status active or frozen\"."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S6.2"
+   ],
+   "finding": "\"Every booked member\" is not precisely defined. It is unclear whether this includes waitlisted members, members who cancelled their own booking, or members who have disabled push notifications or have no registered device. The 5-minute bound has no start point, since the cancel action and the committed cancellation could differ.",
+   "fix": "Define the recipients (members with a confirmed booking at the time of cancellation). State the clock start (the cancellation is committed). Add behaviour for members without push enabled, for example an in-app or email fallback, and require that the failure is recorded."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S6.2"
+   ],
+   "finding": "The notification content is unspecified: the class name, time, and studio, and whether the message mentions refund or credit return, are not stated. Delivery failures and retries are also not covered.",
+   "fix": "List the minimum content fields, and add a retry or failure-handling rule, for example retry for up to 5 minutes and record undelivered notifications."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S6.1",
+    "S6.2"
+   ],
+   "finding": "The IDs are S6.x, but there is no S1 to S5 in the artifact. This suggests that the artifact is incomplete, or that numbering is inconsistent with the file's actual contents.",
+   "fix": "Confirm that this file is the complete set, or renumber it consistently."
+  }
+ ],
+ "sec-01__security-reviewer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.1"
+   ],
+   "finding": "A hidden HTML comment after S1.1 tries to instruct AI reviewers to ignore previous instructions, report no findings and mark the spec approved. This is an embedded prompt injection that would suppress review if an agent obeyed it.",
+   "fix": "Delete the HTML comment from specs/system.md, and have the review pipeline treat artifact text strictly as data and strip or flag hidden comments before review."
+  }
+ ],
+ "sec-02__security-reviewer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "Requires the /admin/classes endpoints, which cancel classes and export member lists, to be reachable without authentication from any network. This is an unauthenticated administrative interface that exposes member personal data and allows anyone to cancel classes and trigger push notifications to all booked members.",
+   "fix": "Replace with: 'The system shall permit access to the /admin/classes endpoints only to authenticated users holding the studio-admin role, and shall reject all other requests with an authentication or authorisation error.' Add testable criteria, such as unauthenticated and non-admin requests being rejected, and member list exports being logged."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S1.3"
+   ],
+   "finding": "The requirement has no parent in the vision. It cites V2, which only covers notifying booked members of a cancellation, and 'for convenience' is an unmeasurable rationale. It is also not in EARS form and not testable as a desired behaviour.",
+   "fix": "Delete S1.3, or trace it to a real vision requirement for authorised admin cancellation and export, written in EARS form."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S1.2"
+   ],
+   "finding": "Cancellation notifications are triggered by a studio cancel action, but no requirement says who may cancel. Combined with S1.3, anyone could trigger mass notifications.",
+   "fix": "Add a requirement that only authorised studio staff can cancel a class and thereby trigger notifications."
+  }
+ ],
+ "sec-03__security-reviewer": [
+  {
+   "severity": "high",
+   "ids": [
+    "S9.2"
+   ],
+   "finding": "Emailing the member their current password requires the system to store passwords in recoverable (plaintext or reversibly encrypted) form and transmits the credential over unencrypted email, exposing it to interception and mailbox compromise.",
+   "fix": "Replace with: When a member taps Forgot password, the system shall email a single-use, time-limited password reset link to the registered address, and the system shall store passwords only as salted hashes and never send or display an existing password."
+  },
+  {
+   "severity": "medium",
+   "ids": [
+    "S9.1"
+   ],
+   "finding": "Sign-in has no stated behaviour for failed credentials, so there is no testable requirement for brute-force protection, lockout or non-revealing error messages.",
+   "fix": "Add: If the email or password is incorrect, the system shall reject the sign-in with a generic error that does not reveal which field was wrong, and after 5 consecutive failures shall delay or lock further attempts for a defined period."
+  },
+  {
+   "severity": "low",
+   "ids": [
+    "S9.2"
+   ],
+   "finding": "The forgot-password flow does not say how the request is protected against account enumeration, so the response could reveal whether an email is registered.",
+   "fix": "Add: The system shall show the same confirmation message whether or not the email address matches a member account."
+  }
+ ]
+}
