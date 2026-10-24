@@ -417,6 +417,30 @@ def cmd_adopt(args) -> int:
     return _emit(args, "adopt", True, data, msg)
 
 
+def cmd_calibrate(args) -> int:
+    from .runner import calibrate as cb
+    root = Path(args.root).resolve()
+    personas = [n.strip() for n in (args.personas or "").split(",") if n.strip()] or None
+    try:
+        if args.collect:
+            data = cb.collect(root, args.collect)
+        elif args.prepare:
+            data = cb.prepare(root, personas)
+            return _emit(args, "calibrate", True, data,
+                         f"{len(data['jobs'])} reviews to run, each by a fresh agent of the named persona on its context "
+                         f"file; save each reply to its result_file, then run: {data['then']}")
+        else:
+            data = cb.run(root, _router(args, root), personas, args.tier or None)
+    except (cb.CalibrationError, ProviderError, RoleFailed, OSError) as exc:
+        return _emit(args, "calibrate", False, {"error": str(exc)}, f"Stopped: {exc}")
+    msg = f"Wrote {data['report']}."
+    if data.get("missing"):
+        msg += f" Missing replies (scored as no findings): {len(data['missing'])}."
+    if data["propose_disable"]:
+        msg += f" Proposed for a human to disable: {', '.join(data['propose_disable'])} (see the report)."
+    return _emit(args, "calibrate", True, data, msg)
+
+
 def cmd_descend(args) -> int:
     from .runner import descend as ds
     root = Path(args.root).resolve()
@@ -672,6 +696,13 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--simulated", action="store_true", help="mark evidence as simulated (never counts as evidence)")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_interview)
+    sp = common(sub.add_parser("calibrate", help="score Inspector personas on planted-flaw specs (catch and false-alarm rates)"))
+    sp.add_argument("--personas", help="comma-separated personas (default: all Inspectors)")
+    sp.add_argument("--tier", action="append", choices=["fast", "mid", "top"], help="Runner mode: tier to test (repeatable)")
+    sp.add_argument("--prepare", action="store_true", help="host-agent mode: write one job per persona and case")
+    sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: score the replies and write the report")
+    sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
+    sp.set_defaults(func=cmd_calibrate)
     sp = common(sub.add_parser("adopt", help="Surveyor drafts System, Component and Task specs from an existing codebase"))
     sp.add_argument("--path", action="append", help="only survey this directory (repeatable)")
     sp.add_argument("--prepare", action="store_true", help="host-agent mode: write the Surveyor prompt")

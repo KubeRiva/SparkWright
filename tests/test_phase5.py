@@ -338,5 +338,87 @@ class TestAdopt(unittest.TestCase):
             self.assertIn("specs/system.md", out["files"])
 
 
+class TestCalibration(unittest.TestCase):
+    # sparkwright: S10.1
+    def test_suite_ships_planted_flaws_and_controls(self):
+        from sparkwright.runner import calibrate as cb
+        cases = cb.load_cases()
+        self.assertGreaterEqual(len([c for c in cases if not c.clean]), 12)
+        self.assertGreaterEqual(len([c for c in cases if c.clean]), 3)
+        covered = {p for c in cases for p in c.expect}
+        self.assertEqual(covered, set(cb.INSPECTORS))
+        # the suite's own contexts must not trip the injection scanner except the injection case
+        hits = [c.id for c in cases if review.scan_injection(c.context)[0]]
+        self.assertEqual(hits, ["sec-01"])
+
+    # sparkwright: S10.2
+    def test_runner_mode_scores_and_writes_report(self):
+        from sparkwright.runner import calibrate as cb
+        cases = {c.id: c for c in cb.load_cases()}
+
+        class Oracle(FakeProvider):
+            """coverage-auditor finds every flaw; newcomer finds nothing; security-reviewer alarms on everything."""
+            def complete(self, messages, model, max_tokens=4000):
+                from sparkwright.runner.providers import Usage
+                persona = messages[0].content.split("\n")[0].split(":", 1)[1].strip()
+                ctx = messages[1].content
+                case = next(c for c in cases.values() if c.context == ctx)
+                if persona == "newcomer":
+                    out = []
+                elif persona == "security-reviewer":
+                    out = [{"severity": "high", "ids": case.ids, "finding": "instruction injection or auth issue", "fix": "x"}]
+                elif case.clean:
+                    out = []
+                else:
+                    out = [{"severity": "high", "ids": case.ids, "finding": " ".join(case.keywords[:1]), "fix": "x"}]
+                self.calls.append((persona, model))
+                return json.dumps(out), Usage(10, 10)
+
+        o = Oracle()
+        router = Router({"roles": {}, "budgets": {}, "models": {}}, {"fast": o, "mid": o, "top": o})
+        with TempRepo() as r:
+            project(r)
+            out = cb.run(r, router)
+            st = out["stats"]["configured"]
+            self.assertEqual(st["coverage-auditor"]["catch_rate"], 1.0)
+            self.assertEqual(st["coverage-auditor"]["false_alarm_rate"], 0.0)
+            self.assertEqual(st["newcomer"]["catch_rate"], 0.0)
+            self.assertEqual(st["security-reviewer"]["false_alarm_rate"], 1.0)
+            report = (r / "specs/reviews/calibration.md").read_text()
+            self.assertIn("| coverage-auditor | configured |", report)
+            # S10.3: newcomer is proposed for disabling, as a config change for a human
+            self.assertEqual(out["propose_disable"], ["newcomer"])
+            self.assertIn("disabled: ['newcomer']", report)
+            self.assertTrue(checks.run(r).ok)
+
+    # sparkwright: S10.3
+    def test_proposal_never_leaves_fewer_than_two_inspectors(self):
+        from sparkwright.runner import calibrate as cb
+        weak = {p: {"catch_rate": 0.0} for p in cb.INSPECTORS}
+        disabled = cb.proposal(weak, 0.5, [])
+        for names in review.DEFAULT_PERSONAS.values():
+            self.assertGreaterEqual(len([n for n in names if n not in disabled]), 2)
+        self.assertEqual(review.default_personas("task", {"review": {"disabled": ["coverage-auditor"]}}),
+                         ["coverage-auditor", "buildability-checker"])  # would drop below 2: config ignored
+        self.assertEqual(review.default_personas("system", {"review": {"disabled": ["newcomer"]}}),
+                         ["coverage-auditor", "contradiction-hunter", "devils-advocate"])
+
+    def test_host_mode(self):
+        from sparkwright.runner import calibrate as cb
+        with TempRepo() as r:
+            project(r)
+            code, out = run_cli(r, "calibrate", "--personas", "contradiction-hunter", "--prepare")
+            self.assertEqual(code, 0, out)
+            jobs = out["data"]["jobs"]
+            self.assertEqual({j["persona"] for j in jobs}, {"contradiction-hunter"})
+            ctx = (r / jobs[0]["context"]).read_text()
+            self.assertNotIn("flaw", ctx.split("\n")[0].lower())  # the agent never sees the answer key
+            for j in jobs:
+                (r / j["result_file"]).write_text("[]")
+            code, out = run_cli(r, "calibrate", "--collect", out["data"]["run_id"])
+            self.assertEqual(code, 0, out)
+            self.assertEqual(out["data"]["stats"]["contradiction-hunter"]["catch_rate"], 0.0)
+
+
 if __name__ == "__main__":
     unittest.main()

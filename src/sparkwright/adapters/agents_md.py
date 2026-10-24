@@ -29,7 +29,8 @@ def section() -> str:
                               run_synthesizer="run `sparkwright interview ingest <file> --consent ...` without --prepare instead: the Runner calls the Theme Synthesizer model.",
                               run_architect="run `sparkwright descend <ID>` without --prepare instead: the Runner calls the Architect model.",
                               run_guide_agent="run `sparkwright interview guide --about ...` without --prepare instead: the Runner calls both models.",
-                              run_surveyor="run `sparkwright adopt` without --prepare instead: the Runner calls the Surveyor model.").strip())
+                              run_surveyor="run `sparkwright adopt` without --prepare instead: the Runner calls the Surveyor model.",
+                              run_calibration_jobs="run `sparkwright calibrate` without --prepare instead: the Runner calls each persona's model.").strip())
         lines.append("")
     lines.append(END)
     return "\n".join(lines) + "\n"

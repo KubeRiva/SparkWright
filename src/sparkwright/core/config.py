@@ -18,6 +18,8 @@ DEFAULTS: dict = {
     "env": {},                 # extra environment for checks/builds; {repo} = main repository root
     "python": None,            # interpreter for the Library Checker (default: the one running sparkwright)
     "mutation": {"min": 0.8, "time_budget_s": 300},
+    "calibration": {"min_catch_rate": 0.5},   # S10.3
+    "review": {"disabled": []},               # personas a human removed from default reviews after calibration
     "approvers": [],           # [{name, email}] allowed to approve (S6.3, D002)
     "require_signed": False,
     "baseline": None,          # commit hash; trailer/drift checks apply after it

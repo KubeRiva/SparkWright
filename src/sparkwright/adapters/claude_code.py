@@ -20,6 +20,13 @@ REVIEW_PERSONAS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devi
                    "buildability-checker", "security-reviewer", "code-reviewer", "theme-synthesizer", "architect",
                    "guide-writer", "question-auditor", "surveyor"]
 
+RUN_CALIBRATION_JOBS = (
+    "For EACH job in `data.jobs` (run up to 6 at a time in parallel), launch the Agent tool with `subagent_type` "
+    "`sparkwright:sparkwright-<job.persona>` and ONLY this task text: \"Review the artifact in <absolute path of "
+    "job.context>. Return only the JSON array.\" Never tell an agent what flaw to look for. Write each reply "
+    "verbatim to `job.result_file`. Wait for all jobs."
+)
+
 RUN_SURVEYOR = (
     "Launch ONE fresh agent with the Agent tool, `subagent_type` `sparkwright:sparkwright-surveyor`, and ONLY this task "
     "text: \"Read <absolute path of data.prompt> and follow it. Reply with only the JSON object.\" Write the agent's "
@@ -121,7 +128,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
         put(f"agents/{PLUGIN}-{name}.md", _agent_md(personas[name], build=True))
         agent_paths.append(f"./agents/{PLUGIN}-{name}.md")
     for skill in load_skills():
-        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT, run_guide_agent=RUN_GUIDE_AGENT, run_surveyor=RUN_SURVEYOR)
+        body = skill.render(run_agents=RUN_AGENTS, run_build_agent=RUN_BUILD_AGENT, run_synthesizer=RUN_SYNTHESIZER, run_architect=RUN_ARCHITECT, run_guide_agent=RUN_GUIDE_AGENT, run_surveyor=RUN_SURVEYOR, run_calibration_jobs=RUN_CALIBRATION_JOBS)
         put(f"skills/{skill.name}/SKILL.md",
             f"---\nname: {skill.name}\ndescription: {skill.description}\n---\n\n{body.strip()}\n")
     manifest = {

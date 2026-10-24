@@ -19,6 +19,14 @@ DEFAULT_PERSONAS: dict[str, list[str]] = {
     "task": ["coverage-auditor", "buildability-checker"],
 }
 HUMAN_GATED = {"evidence", "vision", "system"}
+
+
+def default_personas(level: str, cfg: dict | None = None) -> list[str]:
+    """Default Inspectors for a level minus any a human disabled after calibration; never fewer than MIN_PERSONAS."""
+    names = list(DEFAULT_PERSONAS.get(level, DEFAULT_PERSONAS["system"]))
+    disabled = set(((cfg or {}).get("review") or {}).get("disabled") or [])
+    kept = [n for n in names if n not in disabled]
+    return kept if len(kept) >= 2 else names
 MIN_PERSONAS = 2
 SEVERITY_RANK = {"high": 0, "medium": 1, "low": 2}
 
@@ -239,7 +247,7 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
     repo = store.load(root)
     sf = _resolve(repo, target)
     level = str(sf.meta.get("type", "system"))
-    names = list(persona_names or DEFAULT_PERSONAS.get(level, DEFAULT_PERSONAS["system"]))
+    names = list(persona_names or default_personas(level, router.config))
     all_personas = load_all(root)
     missing = [n for n in names if n not in all_personas]
     if missing:
@@ -351,7 +359,8 @@ def prepare(root: Path | str, target: str, persona_names: list[str] | None = Non
     repo = store.load(root)
     sf = _resolve(repo, target)
     level = str(sf.meta.get("type", "system"))
-    names = list(persona_names or DEFAULT_PERSONAS.get(level, DEFAULT_PERSONAS["system"]))
+    from ..core import config as config_mod
+    names = list(persona_names or default_personas(level, config_mod.load(root)[0]))
     unknown = [n for n in names if n not in load_all(root)]
     if unknown:
         raise ReviewError(f"unknown personas: {unknown}")
