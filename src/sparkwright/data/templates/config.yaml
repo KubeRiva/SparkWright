@@ -1,0 +1,16 @@
+# SparkWright configuration. Changes to this file require a human gate.
+models:
+  top:  { provider: anthropic, model: "<model-name>" }
+  mid:  { provider: openai-compatible, model: "<model-name>", base_url: "<url>" }
+  fast: { provider: openai-compatible, model: "<local-model>", base_url: "http://localhost:11434/v1" }
+roles: {}
+budgets:
+  per_run_usd: 10.0
+gates:            # only component and task may be set: auto | human
+  component: auto
+  task: auto
+checks: {}
+trailers: required   # required | warn | off
+approvers: []        # people allowed to approve: [{name, email}] matching their git author email
+require_signed: false
+baseline: null       # set by init/adopt to the commit before SparkWright was introduced

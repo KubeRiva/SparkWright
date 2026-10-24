@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sparkwright"
+version = "0.1.0.dev0"
+description = "Multi-level, evidence-backed, verified spec-driven development for AI coding agents"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+authors = [{ name = "KubeRiva" }]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "Topic :: Software Development :: Quality Assurance",
+]
+
+[project.urls]
+Homepage = "https://github.com/kuberiva/sparkwright"
+Issues = "https://github.com/kuberiva/sparkwright/issues"
+
+[project.scripts]
+sparkwright = "sparkwright.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+sparkwright = ["data/**/*"]

@@ -1,0 +1,31 @@
+{
+  "name": "sparkwright",
+  "version": "0.1.0.dev0",
+  "description": "SparkWright: evidence-backed, multi-level, verified spec-driven development.",
+  "license": "Apache-2.0",
+  "author": {
+    "name": "KubeRiva"
+  },
+  "homepage": "https://github.com/kuberiva/sparkwright",
+  "agents": [
+    "./agents/sparkwright-coverage-auditor.md",
+    "./agents/sparkwright-contradiction-hunter.md",
+    "./agents/sparkwright-newcomer.md",
+    "./agents/sparkwright-devils-advocate.md",
+    "./agents/sparkwright-buildability-checker.md",
+    "./agents/sparkwright-security-reviewer.md"
+  ],
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

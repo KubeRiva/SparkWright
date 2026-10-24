@@ -1,0 +1,13 @@
+{
+  "name": "sparkwright",
+  "owner": {
+    "name": "KubeRiva"
+  },
+  "plugins": [
+    {
+      "name": "sparkwright",
+      "source": "./adapters/claude-code",
+      "description": "Evidence-backed, multi-level, verified spec-driven development."
+    }
+  ]
+}

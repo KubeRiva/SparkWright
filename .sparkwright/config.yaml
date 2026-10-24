@@ -1,0 +1,13 @@
+# SparkWright configuration for the SparkWright project itself. Human-gated.
+models: {}            # day-to-day use runs on Claude Code's own agents (owner interview E02 Q5)
+roles: {}
+gates:
+  component: auto
+  task: auto
+checks:
+  test: "python3 -m unittest discover -s tests -t tests"
+trailers: warn        # the project predates its own trailer rules; becomes `required` after Phase 3
+approvers:
+  - {name: Srikanth, email: kirankls@gmail.com}
+require_signed: false
+mutation: {min: 0.8, time_budget_s: 300}

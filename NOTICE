@@ -1,0 +1,9 @@
+SparkWright
+Copyright 2026 KubeRiva
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+SparkWright's idea of reviewing specs with zero-context agents was inspired by
+Google's Elephant-Goldfish Model (https://github.com/google/elephant-goldfish-model)
+and Dave Rensin's essay "Elephants, Goldfish, and the New Golden Age of Software
+Engineering". No code or text from that project is included.
