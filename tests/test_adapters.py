@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -17,7 +18,7 @@ class TestNeutralSkills(unittest.TestCase):
         skills = load_skills()
         self.assertEqual({s.name for s in skills}, {"sparkwright-review", "sparkwright-interview", "sparkwright-check", "sparkwright-mutate", "sparkwright-build"})
         for s in skills:
-            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y"))
+            self.assertNotIn("{{", s.render(run_agents="X", run_build_agent="Y", run_synthesizer="Z"))
 
 
 class TestClaudeCodeAdapter(unittest.TestCase):
@@ -36,12 +37,12 @@ class TestClaudeCodeAdapter(unittest.TestCase):
                     self.assertIn("tools: [Read, Grep, Glob]\n", agent)
             skill = (r / "plugin/skills/sparkwright-review/SKILL.md").read_text()
             self.assertIn("sparkwright:sparkwright-<persona>", skill)
-            self.assertIn("hooks/guard.py", files)
+            self.assertNotIn("hooks/guard.py", files)
 
     def _guard(self, root, rel):
         payload = json.dumps({"tool_input": {"file_path": str(root / rel)}, "cwd": str(root)})
-        out = subprocess.run([sys.executable, str(root / "plugin/hooks/guard.py")], input=payload,
-                             capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(root)})
+        out = subprocess.run([sys.executable, "-m", "sparkwright", "guard"], input=payload,
+                             capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(root), "PYTHONPATH": os.environ.get("PYTHONPATH", "")})
         return json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"] if out.stdout.strip() else "allow"
 
     # sparkwright: S6.5

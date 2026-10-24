@@ -119,8 +119,8 @@ class TestHigh(unittest.TestCase):
             project(r)
 
             def guard(payload):
-                out = subprocess.run([sys.executable, str(r / "plugin/hooks/guard.py")], input=json.dumps(payload),
-                                     capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(r)})
+                out = subprocess.run([sys.executable, "-m", "sparkwright", "guard"], input=json.dumps(payload),
+                                     capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(r), "PYTHONPATH": os.environ.get("PYTHONPATH", "")})
                 return json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"] if out.stdout.strip() else "allow"
             edit = lambda p: guard({"tool_name": "Write", "tool_input": {"file_path": p}})
             bash = lambda c: guard({"tool_name": "Bash", "tool_input": {"command": c}})
@@ -130,6 +130,13 @@ class TestHigh(unittest.TestCase):
             self.assertEqual(edit(".sparkwright/worktrees/C1.1.1.T1/calc.py"), "allow")
             self.assertEqual(bash("cat x >> specs/approv*.jsonl"), "deny")
             self.assertEqual(bash("echo '{}' >> .sparkwright/runs/build-x.jsonl"), "deny")
+            # host-mode plumbing the orchestrator needs must stay allowed
+            self.assertEqual(edit(".sparkwright/runs/build-C1.1.1.T1/builder-0.result.json"), "allow")
+            self.assertEqual(edit(".sparkwright/runs/20261024-1-interview-abc123/transcript.md"), "allow")
+            self.assertEqual(edit(".sparkwright/runs/build-C1.1.1.T1/builder-0.md"), "deny")
+            self.assertEqual(edit(".sparkwright/runs/20261024-1-review-abc123/newcomer.json"), "allow")
+            self.assertEqual(edit(".sparkwright/runs/20261024-1-review-abc123.jsonl"), "deny")
+            self.assertEqual(bash("sparkwright build C1.1.1.T1 --done builder --result .sparkwright/runs/build-C1.1.1.T1/builder-0.result.json --json"), "allow")
 
 
 class TestMedium(unittest.TestCase):

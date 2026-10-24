@@ -320,18 +320,35 @@ def cmd_review(args) -> int:
 
 
 def cmd_interview(args) -> int:
-    from .runner.interview import InterviewError, ingest, owner_interview
+    from .runner import interview as iv
     root = Path(args.root).resolve()
-    router = _router(args, root)
     names = [n for n in (args.redact or "").split(",") if n.strip()]
     try:
-        if args.mode == "owner":
-            res = owner_interview(root, router, names=names)
-        else:
+        if args.mode == "owner" and args.host:
+            data = iv.host_owner(root, args.consent or "")
+            return _emit(args, "interview", True, data,
+                         f"Interview the owner in chat following {data['prompt']}; save the transcript to "
+                         f"{data['transcript']}, then run: {data['then']}")
+        if args.mode == "ingest" and args.prepare:
             if not args.file:
-                return _emit(args, "interview", False, {"error": "file required"}, "Usage: interview ingest <file> --consent '<how>'")
-            res = ingest(root, router, args.file, args.consent or "", names=names, simulated=args.simulated)
-    except (InterviewError, ProviderError, RoleFailed) as exc:
+                raise iv.InterviewError("give the transcript file")
+            data = iv.prepare_ingest(root, args.file, args.consent or "", names, args.simulated)
+            return _emit(args, "interview", True, data,
+                         f"Run a fresh Theme Synthesizer agent on {data['prompt']}, save its reply to "
+                         f"{data['result_file']}, then run: {data['then']}")
+        if args.mode == "collect":
+            if not args.file:
+                raise iv.InterviewError("give the run id from --prepare")
+            res = iv.collect(root, args.file)
+        else:
+            router = _router(args, root)
+            if args.mode == "owner":
+                res = iv.owner_interview(root, router, names=names)
+            else:
+                if not args.file:
+                    raise iv.InterviewError("give the transcript file")
+                res = iv.ingest(root, router, args.file, args.consent or "", names=names, simulated=args.simulated)
+    except (iv.InterviewError, ProviderError, RoleFailed, OSError) as exc:
         return _emit(args, "interview", False, {"error": str(exc)}, f"Stopped: {exc}")
     msg = f"Evidence written to {res.path.relative_to(root)}."
     if res.saturated:
@@ -349,7 +366,8 @@ def cmd_mutate(args) -> int:
         return _emit(args, "mutate", False, {"error": "no test command"}, "Set checks.test in .sparkwright/config.yaml or pass --test-cmd.")
     budget = float(args.budget or cfg.get("mutation", {}).get("time_budget_s", 300))
     minimum = float(cfg.get("mutation", {}).get("min", 0.8))
-    rep = mutate.run(root, args.base, test_cmd, budget)
+    from .runner.verify import command_env
+    rep = mutate.run(root, args.base, test_cmd, budget, test_globs=cfg.get("test_globs"), env=command_env(cfg.get("env"), root))
     ok = rep.baseline_ok and rep.score >= minimum
     lines = [rep.message]
     for m in rep.survivors[:30]:
@@ -360,6 +378,11 @@ def cmd_mutate(args) -> int:
     data = {"score": round(rep.score, 4), "total": rep.total, "killed": rep.killed, "baseline_ok": rep.baseline_ok,
             "survivors": [{"file": m.file, "line": m.line, "mutation": m.description} for m in rep.survivors]}
     return _emit(args, "mutate", ok, data, "\n".join(lines))
+
+
+def cmd_guard(args) -> int:
+    from .adapters import guard
+    return guard.main()
 
 
 def cmd_adapt(args) -> int:
@@ -429,7 +452,8 @@ def cmd_verify(args) -> int:
     cfg, _ = config_mod.load(root)
     if not cfg.get("checks"):
         return _emit(args, "verify", False, {"error": "no checks configured"}, "Add commands under `checks:` in .sparkwright/config.yaml.")
-    results = run_checks(root, cfg["checks"])
+    from .runner.verify import command_env
+    results = run_checks(root, cfg["checks"], env=command_env(cfg.get("env"), root))
     ok = all(r.ok for r in results)
     lines = [f"{'PASS' if r.ok else 'FAIL'}  {r.name}: {r.command}" + ("" if r.ok else "\n" + r.output[-1500:]) for r in results]
     return _emit(args, "verify", ok, {"results": [{"name": r.name, "ok": r.ok} for r in results]}, "\n".join(lines))
@@ -514,8 +538,10 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: merge persona outputs and gate")
     sp.set_defaults(func=cmd_review)
     sp = common(sub.add_parser("interview", help="gather evidence: owner interview or transcript ingest"))
-    sp.add_argument("mode", choices=["owner", "ingest"])
-    sp.add_argument("file", nargs="?", help="transcript file (ingest)")
+    sp.add_argument("mode", choices=["owner", "ingest", "collect"])
+    sp.add_argument("file", nargs="?", help="transcript file (ingest) or run id (collect)")
+    sp.add_argument("--host", action="store_true", help="owner: host agent interviews in chat (no API key)")
+    sp.add_argument("--prepare", action="store_true", help="ingest: write the Theme Synthesizer prompt for a host agent")
     sp.add_argument("--consent", help="how consent was obtained (required for ingest)")
     sp.add_argument("--redact", help="comma-separated names to remove")
     sp.add_argument("--simulated", action="store_true", help="mark evidence as simulated (never counts as evidence)")
@@ -526,6 +552,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--test-cmd", help="test command (default: checks.test in config)")
     sp.add_argument("--budget", help="time budget in seconds")
     sp.set_defaults(func=cmd_mutate)
+    sub.add_parser("guard", help="PreToolUse hook for host agents (reads hook JSON on stdin)").set_defaults(func=cmd_guard)
     sp = common(sub.add_parser("adapt", help="generate host adapters: claude-code plugin or AGENTS.md section"))
     sp.add_argument("host", choices=["claude-code", "agents-md"])
     sp.add_argument("--out", help="output directory for the plugin (default adapters/claude-code)")

@@ -31,6 +31,6 @@ Return `[]` if you find nothing. Do not praise.
 
 ## Isolation rules for this host
 
-- Read only the context file named in your task. It contains the artifact, its parents and the constitution.
+- Read only the file named in your task.
 - You have no conversation history and must not ask for it.
-- Do not edit any file. Return only the JSON array described above.
+- Do not edit any file. Return only the JSON your instructions describe.

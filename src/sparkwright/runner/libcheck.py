@@ -57,7 +57,7 @@ print(json.dumps(out))
 """
 
 
-def check(root: Path | str, files: list[str], python: str = sys.executable) -> list[LibIssue]:
+def check(root: Path | str, files: list[str], python: str = sys.executable, env: dict | None = None) -> list[LibIssue]:
     root = Path(root)
     local = _local_roots(root)
     wanted: dict[str, set[str]] = {}
@@ -79,7 +79,8 @@ def check(root: Path | str, files: list[str], python: str = sys.executable) -> l
     if not wanted:
         return []
     req = {m: sorted(a) for m, a in wanted.items()}
-    r = subprocess.run([python, "-c", PROBE, json.dumps(req)], capture_output=True, text=True, cwd=root, timeout=120)
+    r = subprocess.run([python, "-c", PROBE, json.dumps(req)], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", cwd=root, timeout=120, env=env)
     if r.returncode != 0:
         return [LibIssue(files[0] if files else "", 1, f"library probe failed: {r.stderr.strip()[:300]}")]
     result = json.loads(r.stdout.strip().splitlines()[-1])

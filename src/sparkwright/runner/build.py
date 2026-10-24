@@ -31,7 +31,7 @@ from . import libcheck, mutate
 from .personas import load_all
 from .review import Finding, parse_findings
 from .runlog import RunLog
-from .verify import run_checks
+from .verify import command_env, run_checks
 
 MAX_ROUNDS = 2
 AGENT_STEPS = {"test-author", "builder", "code-reviewer"}
@@ -154,6 +154,7 @@ class Build:
         self.test_cmd = (self.cfg.get("checks") or {}).get("test")
         if not self.test_cmd:
             raise BuildError("set checks.test in .sparkwright/config.yaml so builds can run tests")
+        self.env = command_env(self.cfg.get("env"), self.root)
         self.run_no = self._latest_run_no()
         self._open_run()
 
@@ -483,7 +484,7 @@ class Build:
         _git(self.root, "branch", "-D", branch, check=False)
         _git(self.root, "worktree", "add", "-q", "-b", branch, str(ws), base)
         self.state.base, self.state.workspace, self.state.branch = base, str(ws), branch
-        base_run = run_checks(ws, {"test": self.test_cmd})[0]
+        base_run = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
         if not base_run.ok and not _runner_broken(base_run.output):
             self._block("The test suite already fails before this task starts; fix it first, because the red check "
                         "cannot tell new failures from old ones.\n" + base_run.output[-1500:])
@@ -527,7 +528,7 @@ class Build:
                 except py_compile.PyCompileError as exc:
                     problem = f"Test file {f} does not compile: {exc.msg}"
         if not problem:
-            res = run_checks(ws, {"test": self.test_cmd})[0]
+            res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
             if res.ok:
                 problem = "The new tests pass before any implementation exists, so they do not test the task."
             elif _runner_broken(res.output):
@@ -551,7 +552,7 @@ class Build:
 
     def _step_tests_pass(self) -> None:
         st, ws = self.state, Path(self.state.workspace)
-        res = run_checks(ws, {"test": self.test_cmd})[0]
+        res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
         if not res.ok:
             st.rounds["saboteur"] += 1
             if st.rounds["saboteur"] > MAX_ROUNDS:
@@ -594,7 +595,7 @@ class Build:
 
     def _step_verify(self) -> None:
         ws = Path(self.state.workspace)
-        results = run_checks(ws, self.cfg.get("checks") or {})
+        results = run_checks(ws, self.cfg.get("checks") or {}, env=self.env)
         self.log.append("verify", status="done", results=[{"name": r.name, "ok": r.ok} for r in results])
         failed = [r for r in results if not r.ok]
         if failed:
@@ -607,7 +608,7 @@ class Build:
         ws = Path(self.state.workspace)
         changed = _git(ws, "diff", "--name-only", self.state.base, "HEAD").splitlines()
         src = [f for f in changed if f.endswith(".py") and not _match(f, self.test_globs) and (ws / f).is_file()]
-        issues = libcheck.check(ws, src)
+        issues = libcheck.check(ws, src, python=self.cfg.get("python") or __import__("sys").executable, env=self.env)
         self.log.append("library", status="done", issues=[i.__dict__ for i in issues])
         if issues:
             self._builder_retry("Library Checker found problems", "\n".join(f"{i.file}:{i.line}: {i.message}" for i in issues))
@@ -618,7 +619,7 @@ class Build:
     def _mutation(self) -> tuple[mutate.MutationReport, float]:
         mcfg = self.cfg.get("mutation") or {}
         rep = mutate.run(Path(self.state.workspace), self.state.base, self.test_cmd,
-                         float(mcfg.get("time_budget_s", 300)), test_globs=self.test_globs)
+                         float(mcfg.get("time_budget_s", 300)), test_globs=self.test_globs, env=self.env)
         return rep, float(mcfg.get("min", 0.8))
 
     def _step_saboteur(self) -> None:
@@ -705,12 +706,12 @@ class Build:
             tmp = Path(tempfile.mkdtemp(prefix="sparkwright-red-"))
             try:
                 _git(self.root, "worktree", "add", "-q", "--detach", str(tmp / "w"), red)
-                if run_checks(tmp / "w", {"test": self.test_cmd})[0].ok:
+                if run_checks(tmp / "w", {"test": self.test_cmd}, env=self.env)[0].ok:
                     problems.append("the red tests do not fail at their own commit")
             finally:
                 _git(self.root, "worktree", "remove", "--force", str(tmp / "w"), check=False)
                 shutil.rmtree(tmp, ignore_errors=True)
-        failed = [r.name for r in run_checks(ws, self.cfg.get("checks") or {}) if not r.ok]
+        failed = [r.name for r in run_checks(ws, self.cfg.get("checks") or {}, env=self.env) if not r.ok]
         if failed:
             problems.append(f"checks fail at the branch tip: {failed}")
         rep, minimum = self._mutation()

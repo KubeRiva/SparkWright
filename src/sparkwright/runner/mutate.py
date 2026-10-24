@@ -19,7 +19,8 @@ from pathlib import Path
 COMPARE_SWAP = {ast.Eq: ast.NotEq, ast.NotEq: ast.Eq, ast.Lt: ast.GtE, ast.GtE: ast.Lt,
                 ast.Gt: ast.LtE, ast.LtE: ast.Gt, ast.Is: ast.IsNot, ast.IsNot: ast.Is, ast.In: ast.NotIn, ast.NotIn: ast.In}
 BINOP_SWAP = {ast.Add: ast.Sub, ast.Sub: ast.Add, ast.Mult: ast.FloorDiv, ast.Div: ast.Mult, ast.FloorDiv: ast.Mult, ast.Mod: ast.Mult}
-IGNORE = shutil.ignore_patterns(".git", "__pycache__", ".venv", "venv", "node_modules", ".sparkwright", "*.pyc")
+IGNORE = shutil.ignore_patterns(".git", "__pycache__", ".venv", ".venv-*", "venv", "node_modules", ".sparkwright", "*.pyc",
+                                ".mypy_cache", ".pytest_cache", ".ruff_cache", ".worktrees")
 
 
 @dataclass
@@ -145,9 +146,10 @@ class TestCommandError(RuntimeError):
     pass
 
 
-def _run(cmd: str, cwd: Path, timeout: float) -> bool:
+def _run(cmd: str, cwd: Path, timeout: float, env: dict | None = None) -> bool:
+    from .verify import split_cmd
     try:
-        r = subprocess.run(shlex.split(cmd, posix=(os.name != "nt")), cwd=cwd, capture_output=True, timeout=timeout)
+        r = subprocess.run(split_cmd(cmd), cwd=cwd, capture_output=True, timeout=timeout, env=env)
         return r.returncode == 0
     except subprocess.TimeoutExpired:
         return False  # a hang counts as the tests catching the mutant
@@ -163,7 +165,7 @@ def _is_test(path: str, globs: list[str] | None) -> bool:
 
 
 def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, per_test_timeout_s: float = 60,
-        test_globs: list[str] | None = None) -> MutationReport:
+        test_globs: list[str] | None = None, env: dict | None = None) -> MutationReport:
     root = Path(root).resolve()
     report = MutationReport()
     targets = changed_lines(root, base)
@@ -177,7 +179,7 @@ def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, 
         work = Path(td) / "repo"
         shutil.copytree(root, work, ignore=IGNORE)
         try:
-            baseline_passes = _run(test_cmd, work, per_test_timeout_s * 5)
+            baseline_passes = _run(test_cmd, work, per_test_timeout_s * 5, env)
         except TestCommandError as exc:
             report.baseline_ok = False
             report.message = str(exc)
@@ -202,7 +204,7 @@ def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, 
                 report.total += 1
                 try:
                     src_path.write_text(m.source, encoding="utf-8")
-                    survived = _run(test_cmd, work, per_test_timeout_s)
+                    survived = _run(test_cmd, work, per_test_timeout_s, env)
                 finally:
                     src_path.write_text(original, encoding="utf-8")
                 if survived:

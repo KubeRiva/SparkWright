@@ -234,3 +234,31 @@ class TestMutate(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestHostInterview(unittest.TestCase):
+    # sparkwright: S7.1
+    def test_host_owner_interview_then_prepare_and_collect(self):
+        from helpers import run_cli
+        with TempRepo() as r:
+            basic_repo(r)
+            code, out = run_cli(r, "interview", "owner", "--host")
+            self.assertEqual(code, 1)  # consent required
+            code, out = run_cli(r, "interview", "owner", "--host", "--consent", "owner said yes in chat")
+            self.assertEqual(code, 0)
+            self.assertIn("one question per", (r / out["data"]["prompt"]).read_text())
+            write(r, out["data"]["transcript"], "Interviewer: What happened last time?\nOwner: I copied reviews by hand, mail me at a@b.co\n")
+            code, out = run_cli(r, "interview", "ingest", out["data"]["transcript"], "--consent", "owner said yes in chat", "--prepare")
+            self.assertEqual(code, 0, out)
+            prompt = (r / out["data"]["prompt"]).read_text()
+            self.assertIn("[email]", prompt)
+            self.assertNotIn("a@b.co", prompt)
+            code, err = run_cli(r, "interview", "collect", out["data"]["run_id"])
+            self.assertEqual(code, 1)  # no result yet
+            synth = json.dumps({"statements": [{"id": "Q1", "text": "Copies reviews by hand"}],
+                                "themes": [{"id": "T1", "name": "Manual hand-offs", "statements": ["Q1"]}]})
+            write(r, out["data"]["result_file"], synth)
+            code, done = run_cli(r, "interview", "collect", out["data"]["run_id"])
+            self.assertEqual(code, 0, done)
+            self.assertIn("Manual hand-offs", (r / done["data"]["path"]).read_text())
+            self.assertTrue(checks.run(r).ok)

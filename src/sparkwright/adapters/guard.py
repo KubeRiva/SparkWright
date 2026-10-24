@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
-"""SparkWright guard: protects approvals and locked tests; asks before human-gated files."""
+"""SparkWright guard for host agents (SYSTEM S6.5, S8.4).
+
+Run as `sparkwright guard` from a PreToolUse hook: reads the hook JSON on stdin and
+prints a permission decision. Shipping it inside the CLI keeps it cross-platform.
+"""
 import json, os, re, sys
 from pathlib import Path
 
@@ -39,6 +42,8 @@ def decide_path(root, target):
     if m:  # a build workspace: apply the same rules relative to the workspace root
         ws, rel = root / ".sparkwright" / "worktrees" / m.group(1), m.group(2)
     elif rel.startswith(".sparkwright/"):
+        if re.match(r"^\.sparkwright/runs/[^/]+/([\w.-]+\.json|transcript\.md)$", rel):
+            return None, ""  # host agents hand their replies and transcripts to the CLI through these files
         return "deny", "SparkWright run state is written only by the sparkwright CLI."
     rel = norm(rel)
     if rel == norm("specs/approvals.jsonl") or rel == norm("specs/events.jsonl"):
@@ -53,7 +58,7 @@ def decide_path(root, target):
 
 
 def decide_bash(cmd):
-    if re.search(r"approv[^\s/]*\.jsonl|approv\w*\*|events\.jsonl|\.sparkwright/(runs|ledger)", cmd, re.I):
+    if re.search(r"approv[^\s/]*\.jsonl|approv\w*\*|events\.jsonl|\.sparkwright/runs/[^\s'\"]*\.jsonl|\.sparkwright/ledger", cmd, re.I):
         return "deny", "Agents may not touch approvals, events or SparkWright run state."
     if re.search(r"\bsparkwright\b[^|;&\n]*\bapprove\b", cmd, re.I):
         return "deny", "`sparkwright approve` records a human decision; ask the user to run it."
@@ -64,7 +69,7 @@ def decide_bash(cmd):
 
 def main():
     try:
-        data = json.load(sys.stdin)
+        data = json.loads(sys.stdin.read() or "{}")
     except Exception:
         return 0
     root = Path(os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or ".").resolve()

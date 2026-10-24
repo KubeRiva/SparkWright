@@ -15,6 +15,8 @@ DEFAULTS: dict = {
     "budgets": {"per_run_usd": 10.0, "per_level_usd": {}},
     "gates": {"component": "auto", "task": "auto"},
     "checks": {},
+    "env": {},                 # extra environment for checks/builds; {repo} = main repository root
+    "python": None,            # interpreter for the Library Checker (default: the one running sparkwright)
     "mutation": {"min": 0.8, "time_budget_s": 300},
     "approvers": [],           # [{name, email}] allowed to approve (S6.3, D002)
     "require_signed": False,

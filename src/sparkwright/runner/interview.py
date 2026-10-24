@@ -173,3 +173,65 @@ def ingest(root: Path | str, router: Router, transcript_path: Path | str, consen
     sat, _ = saturation(root)
     log.append("write", status="done", evidence=str(path.relative_to(root)))
     return InterviewResult(path, len(synthesis["statements"]), sat)
+
+
+# ------------------------------------------------------------------ host mode (no API key: the host's agents do the talking)
+def host_owner(root: Path | str, consent: str) -> dict:
+    """Prepare an owner interview run by the host agent in chat (S7.1, S8.2)."""
+    root = Path(root).resolve()
+    if not consent or not consent.strip():
+        raise InterviewError("--consent is required: ask the owner for consent first and describe it")
+    log = RunLog(root, "interview")
+    run_dir = log.path.with_suffix("")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    persona = load_all(root)["interviewer"]
+    prompt = run_dir / "interviewer.md"
+    prompt.write_text(
+        persona.system_prompt() + "\n\n## Host mode\n\nYou are talking to the owner directly in chat. Ask one question per "
+        "message and wait for the answer. When you would reply DONE, stop asking and write the whole conversation to "
+        f"the transcript file below as alternating `Interviewer:` and `Owner:` lines.\n\nTranscript file: {run_dir / 'transcript.md'}\n",
+        encoding="utf-8")
+    log.append("consent", status="done", consent=consent)
+    return {"run_id": log.run_id, "prompt": str(prompt.relative_to(root)),
+            "transcript": str((run_dir / "transcript.md").relative_to(root)),
+            "then": f"sparkwright interview ingest {(run_dir / 'transcript.md').relative_to(root).as_posix()} "
+                    f"--consent \"{consent}\" --prepare"}
+
+
+def prepare_ingest(root: Path | str, transcript_path: Path | str, consent: str, names: list[str] | None = None,
+                   simulated: bool = False) -> dict:
+    """Redact a transcript and write the Theme Synthesizer prompt for a fresh host agent."""
+    root = Path(root).resolve()
+    if not consent or not consent.strip():
+        raise InterviewError("--consent is required: describe how consent was obtained")
+    text = Path(transcript_path if Path(transcript_path).is_absolute() else root / transcript_path).read_text(encoding="utf-8")
+    log = RunLog(root, "ingest")
+    run_dir = log.path.with_suffix("")
+    run_dir.mkdir(parents=True, exist_ok=True)
+    persona = load_all(root)["theme-synthesizer"]
+    prompt = run_dir / "theme-synthesizer.md"
+    prompt.write_text(persona.system_prompt() + "\n\n=== TRANSCRIPT (anonymized) ===\n" + redact(text, names), encoding="utf-8")
+    log.append("consent", status="done", consent=consent, simulated=simulated)
+    result = run_dir / "theme-synthesizer.result.json"
+    return {"run_id": log.run_id, "prompt": str(prompt.relative_to(root)), "result_file": str(result.relative_to(root)),
+            "then": f"sparkwright interview collect {log.run_id}"}
+
+
+def collect(root: Path | str, run_id: str) -> InterviewResult:
+    root = Path(root).resolve()
+    try:
+        log = RunLog(root, "ingest", run_id)
+    except ValueError as exc:
+        raise InterviewError(str(exc)) from exc
+    start = next((r for r in log.records() if r.get("step") == "consent"), None)
+    if start is None:
+        raise InterviewError(f"no prepared ingest run {run_id}")
+    result = log.path.with_suffix("") / "theme-synthesizer.result.json"
+    if not result.is_file():
+        raise InterviewError(f"save the Theme Synthesizer's reply to {result.relative_to(root)} first")
+    synthesis = _parse_synthesis(result.read_text(encoding="utf-8"))
+    path = write_evidence(root, "transcript", start["consent"], synthesis, simulated=bool(start.get("simulated")),
+                          slug="interview")
+    sat, _ = saturation(root)
+    log.append("write", status="done", evidence=str(path.relative_to(root)))
+    return InterviewResult(path, len(synthesis["statements"]), sat)

@@ -1,6 +1,7 @@
 """Regression tests for the independent code review of 2026-10-24 (see specs/reviews/2026-10-24-code-review.md)."""
 import io
 import json
+import os
 import subprocess
 import sys
 import unittest
@@ -73,8 +74,8 @@ class TestHigh(unittest.TestCase):
             self.assertIn("specs/system.md", violations)
 
     def _guard(self, root, payload):
-        out = subprocess.run([sys.executable, str(root / "plugin/hooks/guard.py")], input=json.dumps(payload),
-                             capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(root)})
+        out = subprocess.run([sys.executable, "-m", "sparkwright", "guard"], input=json.dumps(payload),
+                             capture_output=True, text=True, env={"CLAUDE_PROJECT_DIR": str(root), "PYTHONPATH": os.environ.get("PYTHONPATH", "")})
         return json.loads(out.stdout)["hookSpecificOutput"]["permissionDecision"] if out.stdout.strip() else "allow"
 
     def test_f6_guard_covers_bash_relative_paths_and_claude_settings(self):
@@ -92,7 +93,9 @@ class TestHigh(unittest.TestCase):
             self.assertEqual(edit("tests/test_a.py"), "deny")          # relative path
             self.assertEqual(edit(".claude/settings.json"), "ask")
             manifest = json.loads((r / "plugin/.claude-plugin/plugin.json").read_text())
-            self.assertIn("Bash", manifest["hooks"]["PreToolUse"][0]["matcher"])
+            hook = manifest["hooks"]["PreToolUse"][0]
+            self.assertIn("Bash", hook["matcher"])
+            self.assertEqual(hook["hooks"][0]["command"], "sparkwright guard")
 
     def test_f7_run_ids_cannot_escape_runs_folder(self):
         with TempRepo() as r:
