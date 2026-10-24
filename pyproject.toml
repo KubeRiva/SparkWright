@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sparkwright"
-version = "0.1.0.dev0"
+dynamic = ["version"]
 description = "Multi-level, evidence-backed, verified spec-driven development for AI coding agents"
 readme = "README.md"
 license = "Apache-2.0"
@@ -12,17 +12,33 @@ license-files = ["LICENSE", "NOTICE"]
 requires-python = ">=3.10"
 dependencies = ["PyYAML>=6.0"]
 authors = [{ name = "KubeRiva" }]
+keywords = ["spec-driven development", "ai agents", "requirements", "traceability", "mutation testing", "claude code", "codex", "gemini cli"]
 classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "Topic :: Software Development :: Quality Assurance",
+  "Topic :: Software Development :: Testing",
 ]
 
 [project.urls]
 Homepage = "https://github.com/kuberiva/sparkwright"
 Issues = "https://github.com/kuberiva/sparkwright/issues"
+Documentation = "https://github.com/kuberiva/sparkwright/tree/main/docs"
+Changelog = "https://github.com/kuberiva/sparkwright/blob/main/CHANGELOG.md"
 
 [project.scripts]
 sparkwright = "sparkwright.cli:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "sparkwright.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]
