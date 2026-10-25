@@ -2,7 +2,7 @@
 id: CR2
 title: Change 21 requirements
 type: change
-status: open
+status: approved
 target: [S1.2, S2.1, S2.3, S2.4, S2.5, S2.6, S2.7, S2.8, S2.9, S3.3, S3.4, S3.5, S3.7, S3.10, S4.5, S5.3, S6.1, S6.7, S6.8, S7.4, S11.3]
 raised_by: human
 rounds: 0
