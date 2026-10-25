@@ -2,7 +2,7 @@
 id: CR4
 title: Change 26 requirements
 type: change
-status: open
+status: approved
 target: [S1.1, S1.7, S1.8, S2.3, S2.4, S2.8, S2.9, S3.3, S3.4, S3.6, S3.7, S3.11, S4.5, S5.3, S6.1, S6.3, S6.5, S6.6, S6.7, S6.8, S6.9, S6.10, S7.4, S7.5, S10.2, S11.3]
 raised_by: human
 rounds: 0
