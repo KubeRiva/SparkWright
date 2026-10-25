@@ -2,7 +2,7 @@
 name: sparkwright-coverage-auditor
 description: SparkWright Inspector. Check that every parent requirement is fully covered by the artifact and nothing is invented
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

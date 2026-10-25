@@ -26,6 +26,14 @@ BUILD_PERSONAS = ["test-author", "property-tester", "builder"]  # need to edit f
 SLOTS = slots(CLAUDE)
 
 
+# Agents that judge or test run on a cheaper model; the Builder and the spec writers inherit the user's model.
+INHERIT_MODEL = {"builder", "architect", "surveyor", "guide-writer"}
+
+
+def _model(name: str) -> str:
+    return "inherit" if name in INHERIT_MODEL else "sonnet"
+
+
 def _agent_md(persona, build: bool = False) -> str:
     desc = persona.job.replace("\n", " ")
     if build:
@@ -34,7 +42,7 @@ def _agent_md(persona, build: bool = False) -> str:
             f"name: {PLUGIN}-{persona.name}\n"
             f"description: SparkWright {persona.name}. {desc}\n"
             "tools: [Read, Grep, Glob, Edit, Write, Bash]\n"
-            "model: inherit\n"
+            f"model: {_model(persona.name)}\n"
             "omitClaudeMd: true\n"
             "---\n\n"
             f"{persona.prompt.strip()}\n\n"
@@ -50,7 +58,7 @@ def _agent_md(persona, build: bool = False) -> str:
         f"name: {PLUGIN}-{persona.name}\n"
         f"description: SparkWright Inspector. {desc}\n"
         "tools: [Read, Grep, Glob]\n"
-        "model: inherit\n"
+        f"model: {_model(persona.name)}\n"
         "omitClaudeMd: true\n"
         "---\n\n"
         f"{persona.prompt.strip()}\n\n"

@@ -20,6 +20,7 @@ DEFAULTS: dict = {
     "python": None,            # interpreter for the Library Checker (default: the one running sparkwright)
     "mutation": {"min": 0.8, "time_budget_s": 300},
     "calibration": {"min_catch_rate": 0.5},   # S10.3
+    "security_review": {"min_changed_lines": 20},  # D006: high-risk builds with smaller source diffs skip it
     "review": {"disabled": []},               # personas a human removed from default reviews after calibration
     "approvers": [],           # [{name, email}] allowed to approve (S6.3, D002)
     "require_signed": False,

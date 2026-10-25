@@ -404,6 +404,24 @@ class TestCalibration(unittest.TestCase):
         self.assertEqual(review.default_personas("system", {"review": {"disabled": ["newcomer"]}}),
                          ["coverage-auditor", "contradiction-hunter", "devils-advocate"])
 
+    def test_batch_host_mode(self):
+        from sparkwright.runner import calibrate as cb
+        with TempRepo() as r:
+            project(r)
+            code, out = run_cli(r, "calibrate", "--personas", "security-reviewer,newcomer", "--prepare", "--batch")
+            jobs = out["data"]["jobs"]
+            self.assertEqual(len(jobs), 2)
+            sec = next(j for j in jobs if j["persona"] == "security-reviewer")
+            self.assertIn("=== CASE sec-01 ===", (r / sec["context"]).read_text())
+            reply = {c: [] for c in sec["cases"]}
+            reply["sec-02"] = [{"severity": "high", "ids": ["S1.3"], "finding": "admin endpoints lack authentication", "fix": "x"}]
+            (r / sec["result_file"]).write_text("```json\n" + json.dumps(reply) + "\n```")
+            code, out = run_cli(r, "calibrate", "--collect", out["data"]["run_id"])
+            st = out["data"]["stats"]["security-reviewer"]
+            self.assertEqual(st["caught"], 1)
+            self.assertTrue(out["data"]["batch"])
+            self.assertEqual(out["data"]["stats"]["newcomer"]["unparseable"], len(next(j for j in jobs if j["persona"] == "newcomer")["cases"]))
+
     def test_host_mode(self):
         from sparkwright.runner import calibrate as cb
         with TempRepo() as r:
@@ -511,6 +529,24 @@ class TestDogfoodFixes(unittest.TestCase):
             write(r, ".venv-x/lib/tests/test_x.py", "# sparkwright: C1.1.1.T1\n")
             write(r, ".gitignore", (r / ".gitignore").read_text() + ".venv-x/\n")
             self.assertNotIn(".venv-x/lib/tests/test_x.py", annotations.test_files(r, ["tests/*", "**/test_*.py"]))
+
+
+class TestAlreadyImplemented(unittest.TestCase):
+    def test_test_author_can_declare_already_implemented(self):
+        with TempRepo() as r:
+            project(r)
+            write(r, "calc.py", CODE)  # an earlier change already delivered clamp
+            commit(r, "earlier work")
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "tests/test_calc.py", GOOD_TESTS)
+            ins = b.submit("test-author", '{"already_implemented": true, "evidence": "calc.clamp exists"}')
+            self.assertEqual(ins["step"], "code-reviewer", ins)
+            prompt = (r / ins["prompt"]).read_text()
+            self.assertIn("ALREADY IMPLEMENTED", prompt)
+            self.assertIn("def clamp", prompt)
+            self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
+            self.assertIn("Already implemented: calc.clamp exists", git(ws(b), "log", "--format=%B", "-n", "20"))
 
 
 class TestPhase5ReviewFixes(unittest.TestCase):

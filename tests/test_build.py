@@ -40,7 +40,7 @@ def project(r: Path, extra_yaml: str = "", risk: str = "") -> None:
     write(r, ".sparkwright/config.yaml",
           f"checks:\n  test: \"{PY} -m unittest discover -s tests -t .\"\ntrailers: warn\n"
           "approvers:\n  - {name: Srikanth, email: t@example.com}\nmutation: {min: 0.8, time_budget_s: 120}\n"
-          "test_globs: [\"tests/*\"]\n")
+          "test_globs: [\"tests/*\"]\nsecurity_review: {min_changed_lines: 1}\n")
     write(r, ".gitignore", ".sparkwright/ledger.json\n.sparkwright/runs/\n.sparkwright/worktrees/\n__pycache__/\n")
     git_init(r)
     commit(r, "start")

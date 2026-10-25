@@ -2,7 +2,7 @@
 name: sparkwright-newcomer
 description: SparkWright Inspector. Find every ambiguity that would stop a new engineer from building this
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

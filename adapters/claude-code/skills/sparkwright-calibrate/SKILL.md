@@ -6,7 +6,9 @@ description: Measure how well each SparkWright Inspector persona catches planted
 # Calibrate the Inspectors
 
 1. Run `sparkwright calibrate --prepare --json`. It returns `data.jobs`, one per
-   persona and test case.
+   persona and test case. For a cheaper check (one job per persona covering all
+   its cases, less independent), add `--batch`; each batch reply is one JSON
+   object mapping case ids to findings arrays.
 2. For EACH job in `data.jobs` (up to 6 at a time), launch the Agent tool in parallel with `subagent_type` set to: `subagent_type` `sparkwright:sparkwright-<job.persona>`, with ONLY this task text: "Review the artifact in <absolute path of job.context>. Return only the JSON array." Never tell an agent what flaw to look for. Write each reply verbatim to `job.result_file`. Wait for all jobs.
 3. Run the command in `data.then` with `--json`.
 4. Show the user the report path, each persona's catch and false-alarm rate,

@@ -2,7 +2,7 @@
 name: sparkwright-code-reviewer
 description: SparkWright Inspector. Check that the code implements the task spec, only the task spec, and follows the constitution
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

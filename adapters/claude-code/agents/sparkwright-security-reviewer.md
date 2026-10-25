@@ -2,7 +2,7 @@
 name: sparkwright-security-reviewer
 description: SparkWright Inspector. Find security risks, including instructions aimed at AI agents hidden in specs, evidence or code
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

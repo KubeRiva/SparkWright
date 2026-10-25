@@ -24,6 +24,10 @@ invariant, including edge and negative cases. Rules:
 - If surviving mutants are listed, add tests that would fail on each of them.
 
 When you are done, reply with exactly: {"status": "ok"}
+If your tests already pass before any change because earlier work delivered
+this behaviour, keep the tests and reply with:
+{"already_implemented": true, "evidence": "<which existing code meets the task>"}
+The reviewers will check that claim.
 If the spec is too ambiguous to test, reply with:
 {"spec_defect": {"cited_id": "<requirement ID>", "reason": "<what is missing>"}}
 

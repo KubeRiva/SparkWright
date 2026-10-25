@@ -58,6 +58,7 @@ class State:
     red_commit: str | None = None
     result: dict = field(default_factory=dict)
     high_risk: bool = False        # risk tier frozen at prepare time (S6.2)
+    already: str = ""              # Test Author's evidence that an earlier task already delivered this behaviour (D005)
 
 
 # ------------------------------------------------------------------ helpers
@@ -153,7 +154,6 @@ class Build:
         self.files = list(self.req.extras.get("files") or [])
         # A test-only task guards behaviour that already exists: its tests must pass from the start (D005).
         self.test_only = bool(self.files) and all(_match(f, list(self.cfg["test_globs"])) for f in self.files)
-        self.fixer = "test-author" if self.test_only else "builder"  # who fixes failed checks and review findings
         self._live_high_risk = str(self.repo.file_of[self.task].meta.get("risk", "")).strip().lower() == "high"
         if not self.files:
             raise BuildError(f"task {self.task} declares no `files`; add a yaml block with files: [...] (S1.8)")
@@ -194,6 +194,29 @@ class Build:
                     pass
         self.state = st
 
+    def _security_required(self) -> bool:
+        """D006: high-risk builds get a Security Reviewer unless the source diff is test-only or tiny."""
+        if not self.high_risk:
+            return False
+        if "security_required" in self.state.result:
+            return bool(self.state.result["security_required"])
+        ws = Path(self.state.workspace)
+        lines = 0
+        for row in _git(ws, "diff", "--numstat", self.state.base, "HEAD", "--").splitlines():
+            parts = row.split("\t")
+            if len(parts) == 3 and not parts[2].startswith("specs/") and not _match(parts[2], self.test_globs):
+                lines += (int(parts[0]) if parts[0].isdigit() else 0) + (int(parts[1]) if parts[1].isdigit() else 0)
+        minimum = int((self.cfg.get("security_review") or {}).get("min_changed_lines", 20) or 0)
+        required = lines >= minimum and lines > 0
+        self.state.result["security_required"] = required
+        self.state.result["source_lines_changed"] = lines
+        return required
+
+    @property
+    def fixer(self) -> str:
+        """Who fixes failed checks and review findings: no Builder runs for test-only or already-implemented tasks."""
+        return "test-author" if (self.test_only or self.state.already) else "builder"
+
     @property
     def high_risk(self) -> bool:
         """S6.2: high if the tier was high when the build started OR is high now; editing the spec mid-build cannot lower it."""
@@ -204,6 +227,8 @@ class Build:
 
     def _enter(self, phase: str) -> None:
         self.state.phase = phase
+        if phase in ("builder", "test-author"):
+            self.state.result.pop("security_required", None)  # the diff may change: decide again at review time
         if phase in AGENT_STEPS and self.state.workspace:
             self.state.step_head = _git(Path(self.state.workspace), "rev-parse", "HEAD").strip()
 
@@ -283,6 +308,12 @@ class Build:
                 parts.append(f"=== IMPLEMENTATION, FROZEN ({f}) ===\n" + _read(ws / f))
             for f in self._test_files(ws):
                 parts.append(f"=== CURRENT TEST ({f}) ===\n" + _read(ws / f))
+        if role in REVIEW_STEPS and self.state.already:
+            parts.append("=== THE TEST AUTHOR REPORTS THIS TASK WAS ALREADY IMPLEMENTED BY EARLIER WORK ===\n"
+                         f"Evidence: {self.state.already}\nNo Builder ran. Check that the existing code really meets the task "
+                         "and that the new tests pin it; raise a high finding if not.")
+            for f in self._existing_task_files(Path(self.state.workspace)):
+                parts.append(f"=== CURRENT SOURCE ({f}) ===\n" + _read(Path(self.state.workspace) / f))
         if role in REVIEW_STEPS:
             parts.append("=== DIFF ===\n" + _git(ws, "diff", self.state.base, "HEAD", "--", ".", ":(exclude)specs")[:80_000])
         if self.state.feedback:
@@ -475,7 +506,7 @@ class Build:
                 self._enter(self.fixer)
             else:
                 st.feedback = ""
-                self._enter("security-reviewer" if step == "code-reviewer" and self.high_risk else "finish")
+                self._enter("security-reviewer" if step == "code-reviewer" and self._security_required() else "finish")
             self._save(f"{REVIEW_STEPS[step]} recorded")
             return self.advance()
         reply = _parse_reply(output)
@@ -485,6 +516,9 @@ class Build:
         reverted = self._unwind_and_enforce(step)
         if "spec_defect" in reply and isinstance(reply["spec_defect"], dict):
             return self._spec_defect(reply["spec_defect"], step)
+        if step == "test-author" and reply.get("already_implemented") is True and not st.frozen:
+            st.already = str(reply.get("evidence", "")).strip()[:1000] or "no evidence given"
+            self.log.append("already-implemented", status="done", evidence=st.already)
         bad = sorted(set(refused + reverted))
         if bad:
             self.log.append(f"enforce:{step}", status="done", reverted=bad)
@@ -587,11 +621,11 @@ class Build:
                     py_compile.compile(str(ws / f), doraise=True)
                 except py_compile.PyCompileError as exc:
                     problem = f"Test file {f} does not compile: {exc.msg}"
-        if not problem and self.test_only:
+        if not problem and (self.test_only or st.already):
             res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
             if not res.ok:
-                problem = ("This task only adds tests that guard behaviour the code already has, so the new tests must "
-                           "pass now. Output:\n" + res.output[-1500:])
+                problem = ("This task's behaviour already exists (test-only task, or you reported it as already "
+                           "implemented), so the new tests must pass now. Output:\n" + res.output[-1500:])
         elif not problem:
             res = run_checks(ws, {"test": self.test_cmd}, env=self.env)[0]
             if res.ok:
@@ -609,8 +643,9 @@ class Build:
             self._enter("test-author")
             self._save("red check failed")
             return
-        if self.test_only:
-            _commit(ws, self.task, "test-author", "tests (guard)", new_tests)
+        if self.test_only or st.already:
+            _commit(ws, self.task, "test-author", "tests (guard)", new_tests,
+                    extra=f"Already implemented: {st.already}\n" if st.already else "")
             self.log.append("guard-check", status="done", tests=new_tests)
             st.feedback = ""
             self._enter("verify")  # no Builder: nothing to implement
@@ -835,11 +870,11 @@ class Build:
             problems.append("workspace has uncommitted changes")
         commits = self._role_commits()
         roles = [(subj.split(": ", 1)[-1], role) for _, subj, role in commits]
-        needed = ([("tests (guard)", "test-author")] if self.test_only else [("tests (red)", "test-author"), ("implement", "builder")]) \
+        needed = ([("tests (guard)", "test-author")] if (self.test_only or st.already) else [("tests (red)", "test-author"), ("implement", "builder")]) \
             + [("lock tests", "runner"), ("code review", "runner")]
         if self.req.extras.get("invariants"):
             needed.append(("property tests (red)", "property-tester"))
-        if self.high_risk:
+        if self._security_required():
             needed.append(("security review", "runner"))
         for need in needed:
             if need not in roles:

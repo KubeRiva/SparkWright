@@ -2,7 +2,7 @@
 name: sparkwright-property-tester
 description: SparkWright property-tester. Turn each declared invariant of a task into a property-based test before any code exists
 tools: [Read, Grep, Glob, Edit, Write, Bash]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

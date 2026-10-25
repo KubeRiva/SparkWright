@@ -470,7 +470,7 @@ def cmd_calibrate(args) -> int:
         if args.collect:
             data = cb.collect(root, args.collect)
         elif args.prepare:
-            data = cb.prepare(root, personas)
+            data = cb.prepare(root, personas, batch=args.batch)
             return _emit(args, "calibrate", True, data,
                          f"{len(data['jobs'])} reviews to run, each by a fresh agent of the named persona on its context "
                          f"file; save each reply to its result_file, then run: {data['then']}")
@@ -758,6 +758,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--personas", help="comma-separated personas (default: all Inspectors)")
     sp.add_argument("--tier", action="append", choices=["fast", "mid", "top"], help="Runner mode: tier to test (repeatable)")
     sp.add_argument("--prepare", action="store_true", help="host-agent mode: write one job per persona and case")
+    sp.add_argument("--batch", action="store_true", help="host-agent mode: one job per persona covering all its cases (cheaper, less independent)")
     sp.add_argument("--collect", metavar="RUN_ID", help="host-agent mode: score the replies and write the report")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_calibrate)

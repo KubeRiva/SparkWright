@@ -2,7 +2,7 @@
 name: sparkwright-theme-synthesizer
 description: SparkWright Inspector. Turn an anonymized interview transcript into statements and themes
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

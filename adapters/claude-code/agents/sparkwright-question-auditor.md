@@ -2,7 +2,7 @@
 name: sparkwright-question-auditor
 description: SparkWright Inspector. Inspect an interview guide for leading, hypothetical, compound or solution-revealing questions
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

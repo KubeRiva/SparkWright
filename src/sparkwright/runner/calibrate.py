@@ -162,7 +162,27 @@ def write_report(root: Path, tier_stats: dict[str, dict[str, dict]], cfg: dict, 
 
 
 # ---- host mode
-def prepare(root: Path | str, personas: list[str] | None = None) -> dict:
+BATCH_NOTE = ("Below are several SEPARATE artifacts, each under a `=== CASE <id> ===` header. Review each one on its "
+              "own, as if you had never seen the others; never compare them. Reply with ONE JSON object mapping each "
+              "case id to the JSON findings array for that case, for example {\"case-a\": [], \"case-b\": [...]}.")
+
+
+def _batch_findings(text: str, case_ids: list[str]) -> dict[str, list[Finding] | None]:
+    import json as _json
+    t = text.strip()
+    m = re.search(r"\{.*\}", t, re.S)
+    try:
+        data = _json.loads(m.group(0) if m else t)
+    except (ValueError, AttributeError):
+        return {c: None for c in case_ids}
+    out = {}
+    for c in case_ids:
+        v = data.get(c) if isinstance(data, dict) else None
+        out[c] = parse_findings(_json.dumps(v)) if isinstance(v, list) else None
+    return out
+
+
+def prepare(root: Path | str, personas: list[str] | None = None, batch: bool = False) -> dict:
     root = Path(root).resolve()
     personas = personas or INSPECTORS
     available = load_all(root)
@@ -177,9 +197,19 @@ def prepare(root: Path | str, personas: list[str] | None = None) -> dict:
     by_id = {c.id: c for c in cases}
     for c in {cid for cid, _ in pairs}:
         (run_dir / "cases" / f"{c}.md").write_text(by_id[c].context, encoding="utf-8")
-    jobs = [{"case": cid, "persona": p, "context": str((run_dir / "cases" / f"{cid}.md").relative_to(root)),
-             "result_file": str((run_dir / f"{cid}__{p}.json").relative_to(root))} for cid, p in pairs]
-    log.append("start", status="started", personas=personas, pairs=[list(x) for x in pairs])
+    if batch:  # one agent per persona: about 85% fewer agent start-ups, at some cost in independence
+        jobs = []
+        for p in personas:
+            mine = [cid for cid, q in pairs if q == p]
+            ctx = run_dir / f"batch__{p}.md"
+            ctx.write_text(BATCH_NOTE + "\n\n" + "\n\n".join(f"=== CASE {c} ===\n{by_id[c].context}" for c in mine),
+                           encoding="utf-8")
+            jobs.append({"case": "batch", "persona": p, "cases": mine, "context": str(ctx.relative_to(root)),
+                         "result_file": str((run_dir / f"batch__{p}.json").relative_to(root))})
+    else:
+        jobs = [{"case": cid, "persona": p, "context": str((run_dir / "cases" / f"{cid}.md").relative_to(root)),
+                 "result_file": str((run_dir / f"{cid}__{p}.json").relative_to(root))} for cid, p in pairs]
+    log.append("start", status="started", personas=personas, pairs=[list(x) for x in pairs], batch=batch)
     return {"run_id": log.run_id, "jobs": jobs, "then": f"sparkwright calibrate --collect {log.run_id}"}
 
 
@@ -198,18 +228,29 @@ def collect(root: Path | str, run_id: str) -> dict:
     run_dir = log.path.with_suffix("")
     results = {}
     missing = []
-    for cid, p in pairs:
-        f = run_dir / f"{cid}__{p}.json"
-        if not f.is_file():
-            missing.append(f.name)
-            results[(cid, p)] = None
-        else:
-            results[(cid, p)] = parse_findings(f.read_text(encoding="utf-8"))
+    if start.get("batch"):
+        for p in personas:
+            mine = [cid for cid, q in pairs if q == p]
+            f = run_dir / f"batch__{p}.json"
+            if not f.is_file():
+                missing.append(f.name)
+            got = _batch_findings(f.read_text(encoding="utf-8"), mine) if f.is_file() else {c: None for c in mine}
+            for c in mine:
+                results[(c, p)] = got[c]
+    else:
+        for cid, p in pairs:
+            f = run_dir / f"{cid}__{p}.json"
+            if not f.is_file():
+                missing.append(f.name)
+                results[(cid, p)] = None
+            else:
+                results[(cid, p)] = parse_findings(f.read_text(encoding="utf-8"))
     cfg, _ = config_mod.load(root)
     stats = score(cases, results)
     path, propose = write_report(root, {"host": stats}, cfg, len(cases))
     log.append("report", status="done", report=REPORT, missing=missing)
-    return {"report": REPORT, "stats": stats, "propose_disable": propose, "missing": missing}
+    return {"report": REPORT, "stats": stats, "propose_disable": propose, "missing": missing,
+            "batch": bool(start.get("batch"))}
 
 
 # ---- runner mode

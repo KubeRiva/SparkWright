@@ -2,7 +2,7 @@
 name: sparkwright-devils-advocate
 description: SparkWright Inspector. Attack the weakest decisions and propose the strongest alternatives
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

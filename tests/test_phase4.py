@@ -262,6 +262,25 @@ if __name__ == "__main__":
     unittest.main()
 
 
+class TestSecurityThreshold(unittest.TestCase):
+    # D006
+    def test_tiny_high_risk_diff_skips_security_review(self):
+        with TempRepo() as r:
+            project(r, risk="high")
+            cfg = r / ".sparkwright/config.yaml"
+            cfg.write_text(cfg.read_text().replace("security_review: {min_changed_lines: 1}", "security_review: {min_changed_lines: 20}"))
+            commit(r, "threshold 20")
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "tests/test_calc.py", GOOD_TESTS)
+            b.submit("test-author", '{"status": "ok"}')
+            write(ws(b), "calc.py", CODE)  # 6 source lines
+            b.submit("builder", '{"status": "ok"}')
+            ins = b.submit("code-reviewer", "[]")
+            self.assertEqual(ins["step"], "ready", ins)
+            self.assertNotIn("security review", git(ws(b), "log", "--format=%s"))
+
+
 class TestGuardForDescend(unittest.TestCase):
     def test_guard_allows_architect_result_but_not_specs_elsewhere(self):
         from sparkwright.adapters import guard

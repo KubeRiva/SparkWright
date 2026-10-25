@@ -2,7 +2,7 @@
 name: sparkwright-contradiction-hunter
 description: SparkWright Inspector. Find requirements that conflict with each other, with their parents, or with the constitution
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 

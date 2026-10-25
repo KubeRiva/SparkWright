@@ -2,7 +2,7 @@
 name: sparkwright-buildability-checker
 description: SparkWright Inspector. Flag requirements that are not testable or too large to build as one unit
 tools: [Read, Grep, Glob]
-model: inherit
+model: sonnet
 omitClaudeMd: true
 ---
 
