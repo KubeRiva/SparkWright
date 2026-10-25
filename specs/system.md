@@ -3,7 +3,7 @@ id: SYSTEM
 title: SparkWright system specification
 type: system
 version: 0.3
-status: in-review
+status: approved
 risk: high
 reviews: [R001, R002, R003]
 decisions: [D001, D002, D003, D004, D005, D006, D007, D008, D009]
@@ -78,8 +78,11 @@ Example with two refs and a continuation line:
 
 `N(s)` = the string with every run of whitespace replaced by one space and leading and
 trailing whitespace removed; `H(s)` = lower-case hex SHA-256 of `N(s)` encoded as UTF-8.
-`J(x)` = Python `json.dumps(x, sort_keys=True, default=str)` (separators `", "` and
-`": "`, ASCII escapes).
+`J(x)` = JSON with object keys sorted, `", "` between items and `": "` after keys,
+non-ASCII characters escaped as `\uXXXX`, and values JSON cannot hold (dates) written
+as their string form (Python: `json.dumps(x, sort_keys=True, default=str)`). This is
+hash scheme version 2: approvals that carry `hash2` also carry `"v": 2`, and a future
+scheme gets a new version number while every earlier version stays verifiable.
 
 - Requirement `hash` = `H(text)`, or `H(text + "\n" + J(extras))` when the task has an
   extras block (S1.8: the parsed yaml block, only the keys written).
@@ -96,10 +99,11 @@ trailing whitespace removed; `H(s)` = lower-case hex SHA-256 of `N(s)` encoded a
 
 ### Globs
 
-Globs use Python `fnmatch`: `*` and `**` both match any characters including `/`, so
-`tests/**/*` matches every file under `tests/`; `dir/**` also matches `dir` itself. A
-pattern with a `/` does not match a file at the root (`**/test_*.py` misses
-`test_a.py`; add `test_*.py` for that). Dotfiles match like other names. Matching is
+Every rule uses one matcher: Python `fnmatch`, where `*` and `**` match any characters
+including `/`, plus three rules: `/**/` also matches a single `/`, a leading `**/` also
+matches nothing, and `dir/**` also matches `dir` itself. Examples: `tests/**/*` matches
+`tests/a.py` and `tests/x/a.py`; `**/test_*.py` matches `test_a.py` and `src/test_a.py`;
+`src/**` matches `src` and `src/a/b.py`. Dotfiles match like other names. Matching is
 case-sensitive except on Windows, and `always_protected` is always matched without
 regard to case.
 
@@ -111,6 +115,10 @@ All times are UTC ISO 8601 with offset (`2026-10-25T04:01:06.276290+00:00`).
 approvals.jsonl  {"approver": "Srikanth", "change_request": null, "hash": "…", "hash2": "…", "id": "S1.1", "risk": "high", "role": "human", "time": "…"}
 events.jsonl     {"event": "changed", "id": "C1.1.1.T1", "reason": "CR2 applied", "run": null, "time": "…"}
 ```
+
+Only `human` lines that pass S6.3 count as approvals. A `runner` line is valid only
+for a `test:<path>` id; `check` fails on any other `runner` line
+(`approval.role-not-allowed`) and it never counts.
 
 Events: `changed`, `cr-applied` (reason = the CR id), `building`, `blocked`, `done`,
 `reviewed` (reason = review id and the hash the reviewers saw). A review file is

@@ -46,6 +46,8 @@ def read(root: Path | str) -> tuple[list[Approval], list[str]]:
 def latest(entries: list[Approval]) -> dict[str, Approval]:
     result: dict[str, Approval] = {}
     for e in entries:  # file order is chronological; last one wins
+        if e.role != "human" and not e.id.startswith("test:"):
+            continue  # D009: only test locks may come from the runner; anything else never counts
         result[e.id] = e
     return result
 
@@ -59,6 +61,8 @@ def append(root: Path | str, entries: list[Approval]) -> None:
             for k in ("risk", "hash2"):
                 if d.get(k) is None:
                     d.pop(k, None)
+            if d.get("hash2"):
+                d["v"] = 2  # hash scheme version (D009): version 2 = hash + hash2 as defined in SYSTEM "Hashes"
             fh.write(json.dumps(d, sort_keys=True) + "\n")
 
 

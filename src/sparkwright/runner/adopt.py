@@ -79,7 +79,8 @@ def inventory(root: Path, paths: list[str] | None = None, test_globs: list[str] 
     files = [f for f in _git(root, "ls-files").splitlines() if f and not f.startswith(SKIP)]
     if paths:
         files = [f for f in files if any(f == p or f.startswith(p.rstrip("/") + "/") for p in paths)]
-    tests = [f for f in files if any(fnmatch.fnmatch(f, g) for g in (test_globs or []))]
+    from ..core.globs import match
+    tests = [f for f in files if match(f, test_globs or [])]
     lines, size = [], 0
     for f in files:
         entry = [f]

@@ -26,7 +26,8 @@ def _git_files(root: Path) -> list[str] | None:
 
 
 def _matches(rel: str, globs: list[str]) -> bool:
-    return any(fnmatch.fnmatch(rel, g) or fnmatch.fnmatch("/" + rel, "*/" + g.lstrip("*/")) for g in globs)
+    from .globs import match
+    return match(rel, globs) or any(fnmatch.fnmatch("/" + rel, "*/" + g.lstrip("*/")) for g in globs)
 
 
 def test_files(root: Path, globs: list[str]) -> list[str]:

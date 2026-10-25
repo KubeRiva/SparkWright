@@ -52,12 +52,8 @@ class Result:
 
 
 def _glob_match(path: str, globs: list[str]) -> bool:
-    for g in globs:
-        if fnmatch.fnmatch(path, g):
-            return True
-        if g.endswith("/**") and (path == g[:-3] or path.startswith(g[:-2])):
-            return True
-    return False
+    from .globs import match
+    return match(path, globs)
 
 
 def file_hash(path: Path) -> str:

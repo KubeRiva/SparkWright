@@ -155,3 +155,29 @@ class TestStrictGuard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestR009(unittest.TestCase):
+    def test_glob_rules(self):
+        from sparkwright.core.globs import match
+        self.assertTrue(match("tests/a.py", ["tests/**/*"]))
+        self.assertTrue(match("tests/x/a.py", ["tests/**/*"]))
+        self.assertTrue(match("test_a.py", ["**/test_*.py"]))
+        self.assertTrue(match("src", ["src/**"]))
+        self.assertFalse(match("lib/a.py", ["tests/**/*"]))
+
+    def test_runner_approval_of_a_requirement_never_counts(self):
+        from sparkwright.core.approvals import Approval, latest
+        got = latest([Approval("S1.1", "h", "x", "runner", None, "t"), Approval("test:t.py", "h", "x", "runner", None, "t")])
+        self.assertNotIn("S1.1", got)
+        self.assertIn("test:t.py", got)
+
+    def test_new_approvals_carry_the_hash_scheme_version(self):
+        with TempRepo() as r:
+            basic_repo(r)
+            write(r, ".sparkwright/config.yaml", "approvers:\n  - {name: Srikanth, email: t@example.com}\n")
+            git_init(r)
+            commit(r, "start")
+            run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+            line = json.loads((r / "specs/approvals.jsonl").read_text().splitlines()[-1])
+            self.assertEqual(line.get("v"), 2)

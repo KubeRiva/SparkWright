@@ -160,7 +160,8 @@ def _run(cmd: str, cwd: Path, timeout: float, env: dict | None = None) -> bool:
 def _is_test(path: str, globs: list[str] | None) -> bool:
     import fnmatch
     if globs:
-        return any(fnmatch.fnmatch(path, g) or (g.endswith("/**") and path.startswith(g[:-2])) for g in globs)
+        from ..core.globs import match
+        return match(path, globs)
     return Path(path).name.startswith("test_") or "/tests/" in f"/{path}"
 
 

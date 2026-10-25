@@ -87,11 +87,11 @@ def exempt(root, rel):
     import fnmatch
     globs = _config(root).get("drift_exclude") or ["specs/**", ".sparkwright/**", "*.md", ".gitignore", ".gitattributes",
                                                      "LICENSE", "NOTICE", "personas/**", "templates/**"]
-    for g in globs:
-        g = norm(g)
-        if fnmatch.fnmatch(rel, g) or (g.endswith("/**") and (rel == g[:-3] or rel.startswith(g[:-2]))):
-            return True
-    return False
+    try:
+        from sparkwright.core.globs import match
+        return match(rel, [norm(g) for g in globs])
+    except Exception:  # noqa: BLE001
+        return any(fnmatch.fnmatch(rel, norm(g)) for g in globs)
 
 
 def decide_bash(cmd, root=None):

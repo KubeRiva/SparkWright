@@ -76,12 +76,8 @@ def _git_bytes(cwd: Path, *args: str) -> bytes | None:
 
 
 def _match(path: str, globs: list[str]) -> bool:
-    for g in globs:
-        if fnmatch.fnmatch(path, g):
-            return True
-        if g.endswith("/**") and path.startswith(g[:-2]):
-            return True
-    return False
+    from ..core.globs import match
+    return match(path, globs)
 
 
 def _status(ws: Path) -> list[tuple[str, str]]:
