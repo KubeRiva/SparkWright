@@ -189,7 +189,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             if status in APPROVED_LIKE:
                 add("error", "approval.unconfirmed", f"{rid} is marked {status} but has no approval record", id=rid, file=r.file, line=r.line)
         elif appr.hash != r.hash:
-            add("error", "approval.hash-mismatch", f"{rid} changed after approval by {appr.approver}; needs a change request", id=rid, file=r.file, line=r.line)
+            if derived.get(rid) == "in-review":  # S3.10: an applied change request is being worked through
+                add("warning", "approval.change-in-progress", f"{rid} is being changed under an applied change request; "
+                    f"review it and re-approve with --cr", id=rid, file=r.file, line=r.line)
+            else:
+                add("error", "approval.hash-mismatch", f"{rid} changed after approval by {appr.approver}; needs a change request", id=rid, file=r.file, line=r.line)
     for eid, ev in repo.evidence.items():
         if ev.status in APPROVED_LIKE | {"confirmed"} and eid not in latest:
             add("error", "approval.unconfirmed", f"evidence {eid} is marked {ev.status} but has no approval record", id=eid, file=ev.file)
@@ -209,7 +213,8 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                 add("error", "approval.locked-test-missing", f"locked test {aid[5:]} is missing", id=aid)
             elif file_hash(path) != appr.hash:
                 add("error", "approval.locked-test-changed", f"locked test {aid[5:]} changed after it was locked", id=aid, file=aid[5:])
-        elif aid not in repo.requirements and ids.kind_of(aid) is not None and aid not in repo.evidence:
+        elif aid not in repo.requirements and ids.kind_of(aid) is not None and aid not in repo.evidence \
+                and aid not in {sf.id for sf in repo.files if sf.id}:
             add("warning", "approval.orphan", f"approval exists for {aid}, which is no longer defined", id=aid)
 
     # --- commits: trailers, drift, roles (S2.3, S2.6, S6.5) ---
@@ -232,7 +237,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             for path in c.files:
                 if _glob_match(path, drift_exclude):
                     continue
-                cites_approved = any(derived.get(t) in APPROVED_LIKE for t in c.tasks)
+                cites_approved = any(derived.get(t) in APPROVED_LIKE | {"changed", "in-review"} for t in c.tasks)
                 if cites_approved and _glob_match(path, cfg["test_globs"]):
                     continue  # tests written for an approved task under its trailer are tracked by that task
                 if not _glob_match(path, tracked_globs):
