@@ -191,10 +191,10 @@ def cmd_approve(args) -> int:
     derived = {k: n.status for k, n in checks.run(root, write_ledger=False).nodes.items()}
     from .core import events as events_mod
     evs, _ = events_mod.read(root)
-    cr_target = None
+    cr_targets: list[str] = []
     if args.cr:
         cr_sf = next((f for f in repo.files if f.id == args.cr), None)
-        cr_target = ids.canonical(str((cr_sf.meta if cr_sf else {}).get("target", "")))
+        cr_targets = checks.cr_targets(cr_sf.meta if cr_sf else {})
 
     def ancestors(rid: str) -> set[str]:
         seen, stack = set(), list(repo.requirements[rid].refs) if rid in repo.requirements else []
@@ -223,20 +223,26 @@ def cmd_approve(args) -> int:
             blocked.append(r.id)
             continue
         if args.cr and prev:  # S3.10: a change request re-approves its target only after a review, then its descendants
-            if r.id != cr_target and cr_target not in ancestors(r.id):
-                refused.append(f"{r.id} is not {cr_target} or below it, so {args.cr} does not cover it")
+            above = [t for t in cr_targets if t in ancestors(r.id)]
+            if r.id not in cr_targets and not above:
+                refused.append(f"{r.id} is not {', '.join(cr_targets)} or below it, so {args.cr} does not cover it")
                 continue
-            if r.id == cr_target and not any(e.id == r.id and e.event == "cr-applied" and e.reason == args.cr for e in evs):
+            if r.id in cr_targets and not any(e.id == r.id and e.event == "cr-applied" and e.reason == args.cr for e in evs):
                 refused.append(f"apply {args.cr} first (`sparkwright change apply {args.cr}`)")
                 continue
             applied = last_applied(r.id)
             if applied and not events_mod.reviewed_since(evs, r.id, r.hash, applied):
                 unreviewed.append(r.id)
                 continue
-            if r.id != cr_target:
-                t_appr, t_applied = latest.get(cr_target), last_applied(cr_target)
-                if derived.get(cr_target) != "approved" or (t_applied and (not t_appr or t_appr.time < t_applied)):
-                    refused.append(f"{r.id}: re-approve the change request's target {cr_target} first (S3.10)")
+            if r.id not in cr_targets:
+                waiting = []
+                for t in above:
+                    t_appr, t_applied = latest.get(t), last_applied(t)
+                    now_ok = any(e.id == t for e in entries)  # re-approved earlier in this same command
+                    if not now_ok and (derived.get(t) != "approved" or (t_applied and (not t_appr or t_appr.time < t_applied))):
+                        waiting.append(t)
+                if waiting:
+                    refused.append(f"{r.id}: re-approve the change request's target {', '.join(waiting)} first (S3.10)")
                     continue
         entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk, r.hash2))
     if refused:
@@ -672,44 +678,53 @@ def cmd_change(args) -> int:
     root = Path(args.root).resolve()
     repo = store.load(root)
     if args.action == "new":
-        target = ids.canonical(args.target or "")
-        if target not in repo.requirements:
-            return _emit(args, "change", False, {"error": f"unknown requirement {target}"}, f"Unknown requirement: {target}")
+        targets = [ids.canonical(t) for t in (args.target or [])]
+        unknown = [t for t in targets if t not in repo.requirements]
+        if not targets or unknown:
+            return _emit(args, "change", False, {"error": f"unknown requirement {', '.join(unknown)}"},
+                         f"Unknown requirement: {', '.join(unknown) or '(none given)'}")
         nums = [int(sf.id[2:]) for sf in repo.files if sf.id and ids.kind_of(sf.id) == "change"]
         cr = f"CR{max(nums or [0]) + 1}"
         path = root / "specs" / "changes" / f"{cr}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
-        r = repo.requirements[target]
-        path.write_text(f"---\nid: {cr}\ntitle: Change {target}\ntype: change\nstatus: open\ntarget: {target}\n"
+        lines = "\n".join(f"- **{t}** [{', '.join(repo.requirements[t].refs)}] {repo.requirements[t].text}\n" for t in targets)
+        tgt = targets[0] if len(targets) == 1 else "[" + ", ".join(targets) + "]"
+        title = f"Change {targets[0]}" if len(targets) == 1 else f"Change {len(targets)} requirements"
+        path.write_text(f"---\nid: {cr}\ntitle: {title}\ntype: change\nstatus: open\ntarget: {tgt}\n"
                         f"raised_by: human\nrounds: 0\n---\n\n## Reason\n\n{args.reason or ''}\n\n## ADDED\n\n"
-                        f"## MODIFIED\n\n- **{target}** [{', '.join(r.refs)}] {r.text}\n\n## REMOVED\n", encoding="utf-8")
+                        f"## MODIFIED\n\n{lines}\n## REMOVED\n", encoding="utf-8")
         return _emit(args, "change", True, {"change_request": str(path.relative_to(root))},
-                     f"Opened {path.relative_to(root)}. Edit the MODIFIED line, then a human approves it with `sparkwright approve {cr} --as <name>`.")
+                     f"Opened {path.relative_to(root)}. Edit the MODIFIED lines, then a human approves it with `sparkwright approve {cr} --as <name>`.")
     # apply
-    cr = ids.canonical(args.target or "")
+    cr = ids.canonical((args.target or [""])[0])
     sf = next((f for f in repo.files if f.id == cr), None)
     if sf is None:
         return _emit(args, "change", False, {"error": f"unknown change request {cr}"}, f"Unknown change request: {cr}")
     if sf.status != "approved":
         return _emit(args, "change", False, {"error": "not approved"}, f"{cr} is '{sf.status}'; it must be approved first.")
     res = checks.run(root, write_ledger=False)
-    target = ids.canonical(str(sf.meta.get("target", "")))
-    if target not in res.nodes:
-        return _emit(args, "change", False, {"error": f"unknown target {target}"}, f"{cr} targets unknown {target}.")
-    tree = ledger.descendants(res.nodes, target)
-    affected, stack = [], [tree]
-    while stack:
-        t = stack.pop()
-        affected.append(t["id"])
-        stack.extend(t["children"])
+    targets = checks.cr_targets(sf.meta)
+    bad = [t for t in targets if t not in res.nodes]
+    if not targets or bad:
+        return _emit(args, "change", False, {"error": f"unknown target {', '.join(bad)}"}, f"{cr} targets unknown {', '.join(bad) or '(none)'}.")
+    affected = []
+    for target in targets:
+        stack = [ledger.descendants(res.nodes, target)]
+        while stack:
+            t = stack.pop()
+            if t["id"] not in affected:
+                affected.append(t["id"])
+            stack.extend(t["children"])
     changed = [a for a in affected if res.nodes[a].status in ("approved", "building", "done")]
     events_mod.append(root, [events_mod.make(a, "changed", reason=f"{cr} applied") for a in changed])
-    events_mod.append(root, [events_mod.make(target, "cr-applied", reason=cr)])
+    events_mod.append(root, [events_mod.make(t, "cr-applied", reason=cr) for t in targets])
+    target = ", ".join(targets)
     _set_status(root / sf.path, "applied")
     return _emit(args, "change", True, {"affected": sorted(affected, key=ids.sort_key), "marked_changed": changed},
                  f"Applied {cr}. {target} is now in review; marked changed: {', '.join(changed) or 'none'}.\n"
-                 f"Next: edit {target}, run `sparkwright review {repo.file_of[target].id or target}`, then "
-                 f"`sparkwright approve {target} --as <name> --cr {cr}`, then rebuild affected tasks.")
+                 f"Next: edit {target}, run `sparkwright review "
+                 f"{' '.join(sorted({repo.file_of[t].id or t for t in targets}))}`, then `sparkwright approve "
+                 f"<file or ids> --as <name> --cr {cr}`, then rebuild affected tasks.")
 
 # ---------------------------------------------------------------- main
 def build_parser() -> argparse.ArgumentParser:
@@ -805,7 +820,7 @@ def build_parser() -> argparse.ArgumentParser:
     common(sub.add_parser("verify", help="run the project's checks from config")).set_defaults(func=cmd_verify)
     sp = common(sub.add_parser("change", help="open or apply a change request"))
     sp.add_argument("action", choices=["new", "apply"])
-    sp.add_argument("target", help="requirement ID (new) or CR ID (apply)")
+    sp.add_argument("target", nargs="+", help="requirement ID(s) (new) or CR ID (apply)")
     sp.add_argument("--reason", help="why the change is needed (new)")
     sp.set_defaults(func=cmd_change)
     return p

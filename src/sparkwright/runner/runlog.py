@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+
+from ..core.secrets import redact
 import re
 import time
 import uuid
@@ -26,7 +28,7 @@ class RunLog:
     def append(self, step: str, **data) -> None:
         rec = {"run": self.run_id, "workflow": self.workflow, "step": step, **data}
         with self.path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(rec, sort_keys=True) + "\n")
+            fh.write(redact(json.dumps(rec, sort_keys=True)) + "\n")  # S11.3
 
     def records(self) -> list[dict]:
         if not self.path.exists():

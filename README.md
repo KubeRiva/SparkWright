@@ -58,7 +58,7 @@ Python 3.10+. One runtime dependency (PyYAML).
 | `sparkwright calibrate` | Score each Inspector on planted-flaw specs: catch rate and false-alarm rate | Yes ¹ |
 | `sparkwright verify` | Run the project's checks from config | No |
 | `sparkwright mutate --base <rev>` | Saboteur: mutation-test the lines you changed | No |
-| `sparkwright change new <ID> \| apply <CR>` | Open or apply a change request when an approved spec is wrong | No |
+| `sparkwright change new <ID>... \| apply <CR>` | Open or apply a change request when an approved spec is wrong | No |
 | `sparkwright adapt claude-code \| codex \| gemini \| agents-md` | Generate host adapters | No |
 | `sparkwright guard` | PreToolUse hook used by host adapters | No |
 

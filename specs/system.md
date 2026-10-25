@@ -206,40 +206,52 @@ Example with two refs and a continuation line:
 | Step | Fails when | Action |
 | --- | --- | --- |
 | Test Author | role fails, or writes outside `test_globs` | refused writes discarded; role failure → `blocked` |
-| Red check | a test file does not compile, or the tests pass before code exists | back to Test Author (max 2 rounds) → `blocked` |
+| Red check | a test file does not compile, or the tests pass before code exists | back to Test Author (`red`, max 2 rounds) → `blocked` |
+| Guard check (test-only or already implemented) | the new tests fail against the current code | back to Test Author (`red`, max 2 rounds) → `blocked` |
+| Property Tester | its tests fail to run, or fail against the frozen code | back to Property Tester (`props`, max 2 rounds) → `blocked` |
 | Builder | role fails, or writes outside `files` | refused writes discarded; role failure → `blocked` |
 | Builder | returns `spec_defect` | change request (S3.5) → task `changed` |
-| Verify / Library Checker | any check fails | back to Builder with the output (max 2 rounds) → `blocked` |
-| Saboteur | score below `mutation.min` | code frozen; back to Test Author (max 2 rounds, S3.4) → `blocked` |
-| Code Reviewer | any high-severity finding | back to Builder (shares the Builder's 2 rounds) → `blocked` |
+| Verify / Library Checker | any check fails | back to Builder with the output (`builder`, max 2 rounds) → `blocked` |
+| Prover | a proof fails | back to Builder (`builder`) → `blocked`; the final gate refuses a task whose proof did not pass |
+| Saboteur | score below `mutation.min` | code frozen; back to Test Author (`saboteur`, max 2 rounds, S3.4); strengthened tests must pass on the frozen code |
+| Code Reviewer | any high-severity finding | back to the fixer: Builder, or Test Author for test-only tasks (`builder`) → `blocked` |
+| Security Reviewer | any high-severity finding | as Code Reviewer |
+| Final gate | the result re-derived from git differs (tests changed after lock, checks fail) | `blocked` with the reason |
 | Human merge | — | the engine stops after committing to branch `sparkwright/<task-id>`; the task becomes `done` when that commit is reachable from the main branch |
 
 ## MVP scope
 
 | Phase | Requirements |
 | --- | --- |
-| MVP 1: offline core | S1.1–S1.4, S1.6, S1.8, S2.1–S2.4, S2.6, S2.8, S2.9, S6.3, S6.5, S6.6, S6.8, S6.9, S9.1, S11.1–S11.7 |
-| MVP 2: agents | S3.1, S3.2, S3.7, S4.1–S4.5, S6.1, S6.7, S7.1, S7.3–S7.6, S8.1–S8.4, S9.3 |
-| Phase 3: build loop | S1.5, S1.7, S2.5, S3.3–S3.6, S3.8–S3.10, S5.1–S5.5, S6.2, S6.4, S9.2 |
+| MVP 1: offline core | S1.1–S1.4, S1.6, S1.8, S2.1–S2.4 (without `--cr`), S2.6, S2.8, S6.3, S6.5, S6.6, S6.8, S6.9, S9.1, S11.1–S11.7 |
+| MVP 2: agents | S3.1, S3.2, S3.7, S4.1–S4.6, S6.1, S6.7, S7.1, S7.3–S7.6, S8.1–S8.4, S9.3 |
+| Phase 3: build loop | S1.5, S1.7, S2.4 `--cr`, S2.5, S2.9, S3.3–S3.6, S3.8–S3.11, S5.1–S5.5, S6.2, S6.4, S9.2 |
+| Phase 4: hardening (D007, D008) | S6.10, S6.11 |
 | Phase 5: adoption and measurement | S2.7, S5.6, S7.2, S7.7, S10.1–S10.3 |
 
 ## Data model
 
 | Entity | Key fields | Stored in |
 | --- | --- | --- |
-| Requirement | id, refs[], text, hash, file, line, extras | Requirement lines |
+| Requirement | id, refs[], text, hash, hash2, criteria, file, line, extras | Requirement lines |
 | Evidence | id, source, consent, simulated, statements, themes | `specs/evidence/E<n>-<slug>.md` |
-| Approval | id, hash, approver, role, change_request, time | `specs/approvals.jsonl` |
-| Event | id, event (`changed`, `building`, `blocked`, `done`, `cr-applied`), run, time, reason | `specs/events.jsonl` |
+| Approval | id, hash, hash2, risk, approver, role (`human`, `runner`), change_request, time | `specs/approvals.jsonl` |
+| Event | id, event (`changed`, `building`, `blocked`, `done`, `cr-applied`, `reviewed`), run, time, reason | `specs/events.jsonl` |
 | Finding | F<n>, severity, requirements, finding, fix, raised_by, decision (`open`, `accepted`, `rejected`, `deferred`) | `specs/reviews/<date>-<target>-r<n>.md` |
-| ChangeRequest | id, target, reason, status (`open`, `approved`, `rejected`, `applied`, `blocked`), rounds, affected[], renames | `specs/changes/CR<n>.md` |
+| ChangeRequest | id, target (one ID or a list), reason, status (`open`, `approved`, `rejected`, `applied`, `blocked`), rounds, renames |  `specs/changes/CR<n>.md` |
 | Decision | id, question, options, chosen, consequences | `specs/decisions/D<n>-<slug>.md` |
 | Persona | name, version, tier, job, never_sees, output | package data, `personas/<name>.md` overrides |
 | Run | run, workflow, step, status, per-role usage | `.sparkwright/runs/<run-id>.jsonl` |
 
 **Derived statuses** (S2.8): `draft` → `in-review` → `approved` → `building` →
-`done`; `building` → `blocked` or `changed`; `approved`/`done` → `changed`;
-`changed` → `in-review` → `approved`; any → `rejected`.
+`done`; `building` → `blocked` or `changed`; `approved`/`building`/`done` →
+`changed` when a change request is applied; `changed` → `in-review` when the
+applied change request targets it; `in-review` → `approved` on re-approval with
+`--cr`; a risk change after approval → `draft`; `rejected` only from front matter.
+
+**Change request lifecycle** (S3.11): `open` → `approved` → `applied` → targets
+re-approved with `--cr`; or `open` → `rejected`; `applied` → `blocked` after 2
+rebuild rounds (S3.6).
 
 ## Repository layout
 
@@ -273,31 +285,64 @@ personas/                              # optional overrides, human-gated
 | `mutate --base <rev>` | Saboteur on a diff | Phase 3 |
 | `verify` | Run project checks | Phase 3 |
 | `build <task-id> [--next]` | Build workflow; `--next` is host mode | Phase 3 |
-| `change <ID> --reason "..."` / `change apply CR<n>` | Change requests | Phase 3 |
+| `change new <ID>... --reason "..."` / `change apply CR<n>` | Change requests | Phase 3 |
 | `descend <ID>` | Draft the next level | Phase 3 |
 | `adopt` / `calibrate` | Brownfield / persona scoring | Later |
 
 Provider interface: `complete(messages, model, max_tokens) -> (text, Usage)`
 where `Usage` has `input_tokens` and `output_tokens`.
 
-Configuration adds to v0.2: `approvers: [{name, email}]`, `require_signed`,
-`price_per_mtok` per tier, `always_protected` (additive), `calibration.min_catch_rate`.
+## Configuration
+
+`.sparkwright/config.yaml` (protected, S6.6). Every key, with its default:
+
+| Key | Type | Default | Used by |
+| --- | --- | --- | --- |
+| `models.<tier>` | `{provider, model, base_url?, api_key_env?, price_per_mtok: {input, output}}` | none | S4.3, S4.5 |
+| `roles.<persona>` | tier | persona's `tier` | S4.3 |
+| `budgets.per_run_usd` | number, 0 = none | 10.0 | S4.5 |
+| `budgets.per_level_usd.<level>` | number, 0 = none | none | S4.5 |
+| `budgets.max_calls_per_run` | integer | 40 | S4.5 |
+| `gates.component`, `gates.task` | `auto` \| `human` | `auto` | S6.1 |
+| `checks.<name>` | shell command | none | S5.1 |
+| `prove` | shell command with `{files}` | none | S5.6 |
+| `env` | map; `{repo}` = main repository root | `{}` | S5.1 |
+| `python` | interpreter path | the running one | S5.5 |
+| `mutation.min`, `mutation.time_budget_s` | number | 0.8, 300 | S3.4, S5.3 |
+| `calibration.min_catch_rate` | number | 0.5 | S10.3 |
+| `security_review.min_changed_lines` | integer | 20 | S6.2 |
+| `review.disabled` | list of personas | `[]` | S10.3 |
+| `approvers` | list of `{name, email, signing_key?}` | `[]` | S6.3 |
+| `require_signed` | `false` \| `high-risk` \| `true` | `high-risk` | S6.3 |
+| `signing_from` | commit | none | S6.3 |
+| `sandbox.keep_env` | list of variable names | `[]` | S6.10 |
+| `log_waivers` | list of commits | `[]` | S6.9 |
+| `baseline` | commit | set by `init`/`adopt` | S2.7 |
+| `trailers` | `required` \| `warn` \| `off` | `required` | S2.3 |
+| `test_globs` | list of globs | `tests/**/*`, `test/**/*`, `**/*_test.*`, `**/*.test.*`, `**/test_*.py` | S2.1, S6.5 |
+| `drift_exclude` | list of globs | see S2.6 | S2.6 |
+| `always_protected` | list of globs, additive | see S6.6 | S6.5 |
+| `protected.<role>` | list of globs, additive | builder, test-author, property-tester defaults | S6.5 |
+
+The red check runs the whole `checks.test` command in the workspace after the
+Test Author's commit; it must exit non-zero, and a collection or discovery error
+does not count as red.
 
 ## Coverage map
 
 | Vision | Covered by |
 | --- | --- |
-| V1 | S1.1, S1.2, S1.4, S2.1, S2.2, S9.1, S11.2 |
+| V1 | S1.1, S1.2, S1.4, S2.1, S2.2, S2.3, S9.1, S11.2 |
 | V2 | S1.3, S1.6, S2.3, S2.8, S3.1, S3.2, S3.7, S4.1, S4.2 |
 | V3 | S1.8, S3.3, S3.4, S3.8, S5.1–S5.6 |
-| V4 | S2.5, S2.6, S3.5, S3.6, S3.9, S3.10 |
-| V5 | S6.1, S6.2, S6.4, S6.6 |
+| V4 | S2.5, S2.6, S3.5, S3.6, S3.9, S3.10, S3.11 |
+| V5 | S6.1, S6.2, S6.4, S6.6, S6.10, S6.11 |
 | V6 | S7.1–S7.7 |
 | V7 | S4.3, S8.1–S8.4, S11.1 |
-| V8 | S2.4, S6.3, S6.5, S6.9, S9.2 |
+| V8 | S2.4, S6.3, S6.5, S6.9, S6.10, S6.11, S9.2 |
 | V9 | S4.4, S4.5, S9.3, S10.1–S10.3 |
-| V10 | S1.5, S1.7, S2.7, S2.9, S6.8, S11.4 |
-| V11 | S6.7, S11.3, S11.5, S11.6, S11.7 |
+| V10 | S1.5, S1.7, S2.7, S2.9, S3.11, S6.8, S11.4 |
+| V11 | S4.6, S6.7, S11.3, S11.5, S11.6, S11.7 |
 
 ## Open questions
 

@@ -303,6 +303,13 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     return Result(findings, nodes, cfg, commits)
 
 
+def cr_targets(meta: dict) -> list[str]:
+    """Targets of a change request: `target: S1.2` or `target: [S1.2, S2.3]` (D008)."""
+    raw = meta.get("target")
+    vals = raw if isinstance(raw, list) else [raw] if raw else []
+    return [ids.canonical(str(v)) for v in vals if str(v).strip()]
+
+
 def rename_map(repo) -> dict[str, str]:
     """OLD -> NEW from approved or applied change requests (S2.9, D004)."""
     out: dict[str, str] = {}

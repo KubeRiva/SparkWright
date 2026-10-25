@@ -83,6 +83,8 @@ class Router:
 
         `force` bypasses the run ceiling so the minimum number of Inspectors can always run (S4.5).
         """
+        from ..core.secrets import redact
+        user_content = redact(user_content)  # S11.3: never send secrets to a provider
         tier = self.tier_for(persona)
         attempts = 0
         last_error: Exception | None = None

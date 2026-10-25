@@ -64,7 +64,7 @@ class TestHostAgentReview(unittest.TestCase):
         with TempRepo() as r:
             basic_repo(r)
             prep = prepare(r, "SYSTEM")
-            self.assertTrue(prep.context_path.read_text().startswith("=== ARTIFACT"))
+            self.assertIn("=== ARTIFACT", prep.context_path.read_text())
             (prep.run_dir / "coverage-auditor.json").write_text(FIND("medium", "S1.1 misses error handling"))
             (prep.run_dir / "newcomer.json").write_text("Here you go: " + FIND("low", "Term 'parse' undefined"))
             res = collect(r, prep.run_id)

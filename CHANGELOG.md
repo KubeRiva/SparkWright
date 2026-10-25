@@ -24,3 +24,7 @@ First public release.
   (`require_signed`, `signing_from`); secret keys hidden from AI-written code
   (`sandbox.keep_env`); approval locks cover parent links and acceptance
   criteria; per-commit append-only logs; a call cap for unpriced models.
+- Review fixes (D008): change requests can target several requirements;
+  secrets masked in prompts and run logs; spec text framed as data for agents;
+  hidden Unicode flagged in reviews; a required Security Reviewer can no longer
+  be skipped silently.

@@ -84,7 +84,7 @@ Remaining tasks, in a sensible order:
 | Several tasks | "Plan builds for C2.1.1.T1 C2.1.2.T1 C2.2.1.T1" | `sparkwright build C2.1.1.T1 C2.1.2.T1 C2.2.1.T1 --plan` |
 | Reviewer quality | "Calibrate the reviewers" | `sparkwright calibrate --prepare` |
 | Check traceability | "Run sparkwright check and trace V1" | `sparkwright trace V1` |
-| Change a spec | "Open a change request for C1.2.1" | `sparkwright change new C1.2.1 --reason "..."` |
+| Change a spec | "Open a change request for C1.2.1" | `sparkwright change new C1.2.1 [more IDs] --reason "..."` |
 
 Approvals count only when **you** commit them with the git email listed under
 `approvers:` in `.sparkwright/config.yaml`. The same goes for protected files

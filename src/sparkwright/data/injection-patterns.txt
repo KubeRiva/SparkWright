@@ -1,0 +1,10 @@
+# Instruction patterns that suggest text is trying to steer an AI agent (S6.7).
+# One Python regular expression per line, matched case-insensitively across lines.
+# Matches outside code spans (inline `code` or fenced blocks) are high-severity findings.
+ignore (all |any )?(the )?(previous|prior|above|earlier) (instructions|prompts?)
+\byou are now\b
+disregard (the|your|all) (system|previous|prior)
+<!--[^>]*(agent|assistant|claude|gpt|llm|ai\b)[^>]*-->
+do not (tell|inform|show) the (user|human|reviewer)
+new instructions:
+\b(system|developer) prompt:
