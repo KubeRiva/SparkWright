@@ -230,6 +230,8 @@ def _write_tasks(root: Path, repo: store.Repo, plan: dict, text: str) -> list[st
             cut = m.end() + nxt.start() if nxt else len(content)
             content = content[:cut].rstrip("\n") + "\n\n" + addition + ("\n" + content[cut:] if nxt else "")
         original = _read(path)
+        # The file now holds unapproved drafts: an approved file goes back to in-review until a human approves it.
+        content = re.sub(r"^(---\n(?:.*\n)*?)status:\s*approved\s*$", r"\1status: in-review", content, count=1, flags=re.M)
         path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
         after_sf = next((sf for sf in store.load(root).files if sf.path == plan["owner"]), None)
         after = {r.id: r.hash for r in after_sf.requirements} if after_sf else {}

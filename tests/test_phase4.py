@@ -237,6 +237,9 @@ class TestDescend(unittest.TestCase):
             self.assertLess(text.index("C1.1.1.T1"), text.index("C1.1.1.T2"))
             self.assertLess(text.index("C1.1.1.T2"), text.index("## Notes"))
             self.assertNotIn("Open question", text)
+            self.assertIn("status: in-review", text)  # approved file now holds drafts
+            from sparkwright.core import checks as _checks
+            self.assertNotIn("approval.unconfirmed", [f.code for f in _checks.run(r).findings])
 
     def test_task_draft_must_declare_files(self):
         with TempRepo() as r:
