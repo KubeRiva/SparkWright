@@ -112,3 +112,9 @@
 {"event": "cr-applied", "id": "S6.8", "reason": "CR2", "time": "2026-10-25T03:41:15.522669+00:00"}
 {"event": "cr-applied", "id": "S7.4", "reason": "CR2", "time": "2026-10-25T03:41:15.522680+00:00"}
 {"event": "cr-applied", "id": "S11.3", "reason": "CR2", "time": "2026-10-25T03:41:15.522692+00:00"}
+{"event": "changed", "id": "S5.2", "reason": "CR3 applied", "time": "2026-10-25T03:53:47.894994+00:00"}
+{"event": "changed", "id": "S6.4", "reason": "CR3 applied", "time": "2026-10-25T03:53:47.895029+00:00"}
+{"event": "changed", "id": "S6.5", "reason": "CR3 applied", "time": "2026-10-25T03:53:47.895035+00:00"}
+{"event": "cr-applied", "id": "S5.2", "reason": "CR3", "time": "2026-10-25T03:53:47.902703+00:00"}
+{"event": "cr-applied", "id": "S6.4", "reason": "CR3", "time": "2026-10-25T03:53:47.902733+00:00"}
+{"event": "cr-applied", "id": "S6.5", "reason": "CR3", "time": "2026-10-25T03:53:47.902740+00:00"}
