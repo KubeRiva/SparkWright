@@ -189,7 +189,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             if status in APPROVED_LIKE:
                 add("error", "approval.unconfirmed", f"{rid} is marked {status} but has no approval record", id=rid, file=r.file, line=r.line)
         elif appr.hash != r.hash:
-            if derived.get(rid) == "in-review":  # S3.10: an applied change request is being worked through
+            if derived.get(rid) in ("in-review", "changed"):  # S3.10: an applied change request is being worked through
                 add("warning", "approval.change-in-progress", f"{rid} is being changed under an applied change request; "
                     f"review it and re-approve with --cr", id=rid, file=r.file, line=r.line)
             else:
