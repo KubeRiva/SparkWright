@@ -100,6 +100,16 @@ signed commits. Until you set it up, `check` only warns. To switch it on:
 like secrets (`*_API_KEY`, `*TOKEN*`, `AWS_*` …). If a test needs one, list
 it under `sandbox: {keep_env: [NAME]}`.
 
+**Keep Claude on the rails.** Set `guard: {strict: true}` in
+`.sparkwright/config.yaml` and Claude Code can change code only inside a task
+build; it is told to draft or build a task instead. Run `sparkwright check` in
+CI as a required status check so nothing untraced reaches main.
+
+**Sandbox.** Tests and AI-written code run with HOME pointed at an empty folder,
+so credentials in your home folder are not at their usual paths. If your tests
+need your real home folder, set `sandbox: {isolate_home: false}`. On Linux,
+`sandbox: {network: false}` also cuts network access.
+
 ## Troubleshooting
 
 | Symptom | Fix |

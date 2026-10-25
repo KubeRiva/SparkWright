@@ -28,3 +28,7 @@ First public release.
   secrets masked in prompts and run logs; spec text framed as data for agents;
   hidden Unicode flagged in reviews; a required Security Reviewer can no longer
   be skipped silently.
+- R008 fixes (D009): strict guard mode (`guard.strict`); mutation `not-run`
+  never passes silently; HOME isolation and optional network cut-off for
+  agent-written code; warnings for weakening config; wider protected paths;
+  approver-identity line in `status`; precise hash, glob and record formats.

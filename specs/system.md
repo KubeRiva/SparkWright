@@ -6,7 +6,7 @@ version: 0.3
 status: approved
 risk: high
 reviews: [R001, R002, R003]
-decisions: [D001, D002, D003, D004, D005, D006, D007]
+decisions: [D001, D002, D003, D004, D005, D006, D007, D008, D009]
 ---
 
 ## Overview
@@ -70,13 +70,55 @@ Example with two refs and a continuation line:
   assumption and vision lines (a vision line with `[]` is reported by S1.4).
 - A line that starts with `- **<something matching an ID pattern>**` but does not
   follow the grammar is a grammar error.
-- Requirement hash: SHA-256 (hex) of the UTF-8 text with whitespace runs
-  collapsed to one space, followed, for tasks with an extras block, by a newline
-  and the extras as JSON with sorted keys. `hash2` (S2.4) adds the sorted refs
-  and, for task files, the acceptance criteria. Test-file hash: SHA-256 of the
-  file bytes with CRLF converted to LF. Evidence and change-request hash:
-  requirement-text normalisation applied to the file body after the front
-  matter; their `hash2` adds the significant front-matter fields (S2.4).
+- Lines inside fenced code blocks are never requirement lines. Requirement lines in
+  change requests and reviews quote requirements; they are not definitions. An ID
+  defined twice in the spec set is a grammar error (`grammar.duplicate-id`).
+
+### Hashes
+
+`N(s)` = the string with every run of whitespace replaced by one space and leading and
+trailing whitespace removed; `H(s)` = lower-case hex SHA-256 of `N(s)` encoded as UTF-8.
+`J(x)` = Python `json.dumps(x, sort_keys=True, default=str)` (separators `", "` and
+`": "`, ASCII escapes).
+
+- Requirement `hash` = `H(text)`, or `H(text + "\n" + J(extras))` when the task has an
+  extras block (S1.8: the parsed yaml block, only the keys written).
+- Requirement `hash2` = `H(text + "\nrefs:" + ",".join(sorted(refs)) + "\nextras:" +
+  J(extras) + "\ncriteria:" + C)`, where `C` joins the non-empty lines of the task file's
+  acceptance-criteria section, each passed through `N`, with `"\n"` (empty when there is
+  none).
+- Evidence, change request and decision `hash` = `H(body)` (everything after the front
+  matter); `hash2` = `H(body + "\nmeta:" + J({k: v}))` for the fields `simulated`,
+  `consent`, `source`, `target`, `renames` and `risk` that are present.
+- Test-file hash = hex SHA-256 of the file's bytes with CRLF replaced by LF.
+- Example: `H("The parser shall parse.")` =
+  `09c2dc19a12eda64c7ab296833b7c8152b7d82827345d16e3a8a5fc510d56477`.
+
+### Globs
+
+Globs use Python `fnmatch`: `*` and `**` both match any characters including `/`, so
+`tests/**/*` matches every file under `tests/`; `dir/**` also matches `dir` itself. A
+pattern with a `/` does not match a file at the root (`**/test_*.py` misses
+`test_a.py`; add `test_*.py` for that). Dotfiles match like other names. Matching is
+case-sensitive except on Windows, and `always_protected` is always matched without
+regard to case.
+
+### Record formats
+
+All times are UTC ISO 8601 with offset (`2026-10-25T04:01:06.276290+00:00`).
+
+```
+approvals.jsonl  {"approver": "Srikanth", "change_request": null, "hash": "…", "hash2": "…", "id": "S1.1", "risk": "high", "role": "human", "time": "…"}
+events.jsonl     {"event": "changed", "id": "C1.1.1.T1", "reason": "CR2 applied", "run": null, "time": "…"}
+```
+
+Events: `changed`, `cr-applied` (reason = the CR id), `building`, `blocked`, `done`,
+`reviewed` (reason = review id and the hash the reviewers saw). A review file is
+`specs/reviews/<date>-<target>-r<n>.md` with front matter (`id: R<n>`, `type: review`,
+`target`) and one table with the columns ID (`F<n>`, numbered from 1), Severity
+(`high`, `medium`, `low`), Requirements, Finding, Suggested fix, Raised by and Decision
+(`open`, `accepted`, `rejected`, `deferred`, or a short free text such as
+`fixed (D009)`; anything other than `open` closes the finding).
 
 ## Components
 
@@ -84,12 +126,12 @@ Example with two refs and a continuation line:
 | --- | --- | --- | --- |
 | S1 | Spec Store | File formats, IDs, grammar, templates, deltas | V1, V2, V3, V10 |
 | S2 | Ledger & Surveyor | Traceability, coverage, drift, approvals, status | V1, V2, V4, V8, V10 |
-| S3 | Workflow Engine | review, interview, descend, build, change | V2, V3, V4 |
-| S4 | Roles & Model Router | Personas, isolation, tiers, retries, ceilings | V2, V7, V9 |
+| S3 | Workflow Engine | review, interview, descend, build, change | V2, V3, V4, V10 |
+| S4 | Roles & Model Router | Personas, isolation, tiers, retries, ceilings | V2, V7, V9, V11 |
 | S5 | Verification Toolkit | Project checks, red check, mutation, property, library checks, proofs | V3 |
 | S6 | Policy & Gates | Gates, approvals, risk tiers, protected paths, CI checks | V5, V8, V10, V11 |
 | S7 | Evidence & Interviews | Owner interview, transcript ingest, synthesis, privacy | V6 |
-| S8 | Adapters | Adapter contract, neutral skills, host packages | V7 |
+| S8 | Adapters | Adapter contract, neutral skills, host packages, guard | V7, V8 |
 | S9 | Reports | Status, trace, findings, PR descriptions, telemetry | V1, V8, V9 |
 | S10 | Calibration | Planted-flaw suite and persona scoring | V9 |
 | S11 | Non-functional | Offline core, determinism, JSON, secrets, plain text, performance | V1, V7, V10, V11 |
@@ -211,26 +253,27 @@ Example with two refs and a continuation line:
 | Test Author | role fails, or writes outside `test_globs` | refused writes discarded; role failure → `blocked` |
 | Red check | a test file does not compile, or the tests pass before code exists | back to Test Author (`red`, max 2 rounds) → `blocked` |
 | Guard check (test-only or already implemented) | the new tests fail against the current code | back to Test Author (`red`, max 2 rounds) → `blocked` |
-| Property Tester | its tests fail to run, or fail against the frozen code | back to Property Tester (`props`, max 2 rounds) → `blocked` |
+| Property Tester | its tests do not compile, assert nothing, skip, or lack the task annotation (checked before the Builder; they run from verify onward) | back to Property Tester (`props`, 2 retries) → `blocked` |
 | Builder | role fails, or writes outside `files` | refused writes discarded; role failure → `blocked` |
 | Builder | returns `spec_defect` | change request (S3.5) → task `changed` |
 | Verify / Library Checker | any check fails | back to Builder with the output (`builder`, max 2 rounds) → `blocked` |
 | Prover | a proof fails | back to Builder (`builder`) → `blocked`; the final gate refuses a task whose proof did not pass |
-| Saboteur | score below `mutation.min` | code frozen; back to Test Author (`saboteur`, max 2 rounds, S3.4); strengthened tests must pass on the frozen code |
+| Saboteur | score below `mutation.min` | code frozen; back to Test Author (`saboteur`, 2 retries, S3.4); strengthened tests must pass on the frozen code |
+| Saboteur | no mutants although source changed (S5.3) | `blocked` unless `mutation.allow_not_run` is set |
 | Code Reviewer | any high-severity finding | back to the fixer: Builder, or Test Author for test-only tasks (`builder`) → `blocked` |
 | Security Reviewer | any high-severity finding | as Code Reviewer |
 | Final gate | the result re-derived from git differs (tests changed after lock, checks fail) | `blocked` with the reason |
-| Human merge | — | the engine stops after committing to branch `sparkwright/<task-id>`; the task becomes `done` when that commit is reachable from the main branch |
+| Human merge | — | the engine stops after committing to branch `sparkwright/<task-id>`; the task becomes `done` when that commit is reachable from the branch `check` runs on, in CI the protected main branch (S2.8) |
 
 ## MVP scope
 
 | Phase | Requirements |
 | --- | --- |
-| MVP 1: offline core | S1.1–S1.4, S1.6, S1.8, S2.1–S2.4 (without `--cr`), S2.6, S2.8, S6.3, S6.5, S6.6, S6.8, S6.9, S9.1, S11.1–S11.7 |
+| MVP 1: offline core | S1.1–S1.4, S1.6, S1.8, S2.1–S2.4 (without `--cr`), S2.6, S2.7 (`init` baseline), S2.8, S6.3, S6.5, S6.6, S6.8, S6.9, S9.1, S11.1–S11.7 |
 | MVP 2: agents | S3.1, S3.2, S3.7, S4.1–S4.6, S6.1, S6.7, S7.1, S7.3–S7.6, S8.1–S8.4, S9.3 |
-| Phase 3: build loop | S1.5, S1.7, S2.4 `--cr`, S2.5, S2.9, S3.3–S3.6, S3.8–S3.11, S5.1–S5.5, S6.2, S6.4, S9.2 |
-| Phase 4: hardening (D007, D008) | S6.10, S6.11 |
-| Phase 5: adoption and measurement | S2.7, S5.6, S7.2, S7.7, S10.1–S10.3 |
+| Phase 3: build loop | S1.5, S1.7, S2.4 `--cr`, S2.5, S2.9, S3.3–S3.6, S3.8–S3.11, S5.1–S5.5, S6.2, S6.4, S6.10, S9.2 |
+| Phase 4: hardening (D007, D008, D009) | S6.11, S8.5 |
+| Phase 5: adoption and measurement | S2.7 (`adopt`), S5.6, S7.2, S7.7, S10.1–S10.3 |
 
 ## Data model
 
@@ -281,16 +324,16 @@ personas/                              # optional overrides, human-gated
 | --- | --- | --- |
 | `init` | Layout, templates, config, baseline | MVP 1 |
 | `check` / `trace <ID>` / `status` | Offline checks and reports | MVP 1 |
-| `approve <ID> --as <name> [--cr CR<n>] [--test]` | Record an approval | MVP 1 |
+| `approve <ID> --as <name> [--cr CR<n>] [--test]` | Record an approval (`--cr` from Phase 3) | MVP 1 |
 | `review <ID> [--prepare / --collect RUN]` | Inspector swarm | MVP 2 |
 | `interview owner \| ingest <file>` | Evidence | MVP 2 |
-| `adapt claude-code \| agents-md` | Host adapters | MVP 2 |
+| `adapt claude-code \| codex \| gemini \| agents-md` / `guard` | Host adapters and the host guard | MVP 2 |
 | `mutate --base <rev>` | Saboteur on a diff | Phase 3 |
 | `verify` | Run project checks | Phase 3 |
 | `build <task-id> [--next]` | Build workflow; `--next` is host mode | Phase 3 |
 | `change new <ID>... --reason "..."` / `change apply CR<n>` | Change requests | Phase 3 |
 | `descend <ID>` | Draft the next level | Phase 3 |
-| `adopt` / `calibrate` | Brownfield / persona scoring | Later |
+| `adopt` / `calibrate` | Brownfield / persona scoring | Phase 5 |
 
 Provider interface: `complete(messages, model, max_tokens) -> (text, Usage)`
 where `Usage` has `input_tokens` and `output_tokens`.
@@ -312,20 +355,25 @@ where `Usage` has `input_tokens` and `output_tokens`.
 | `env` | map; `{repo}` = main repository root | `{}` | S5.1 |
 | `python` | interpreter path | the running one | S5.5 |
 | `mutation.min`, `mutation.time_budget_s` | number | 0.8, 300 | S3.4, S5.3 |
+| `mutation.allow_not_run` | boolean | `false` | S5.3 |
 | `calibration.min_catch_rate` | number | 0.5 | S10.3 |
 | `security_review.min_changed_lines` | integer | 20 | S6.2 |
+| `security_review.paths` | globs that always bring the Security Reviewer into a build | `[]` | S6.2 |
 | `review.disabled` | list of personas | `[]` | S10.3 |
 | `approvers` | list of `{name, email, signing_key?}` | `[]` | S6.3 |
 | `require_signed` | `false` \| `high-risk` \| `true` | `high-risk` | S6.3 |
 | `signing_from` | commit | none | S6.3 |
 | `sandbox.keep_env` | list of variable names | `[]` | S6.10 |
+| `sandbox.isolate_home` | boolean | `true` | S6.10 |
+| `sandbox.network` | boolean | `true` | S6.10 |
+| `guard.strict` | boolean | `false` | S8.5 |
 | `log_waivers` | list of commits | `[]` | S6.9 |
 | `baseline` | commit | set by `init`/`adopt` | S2.7 |
 | `trailers` | `required` \| `warn` \| `off` | `required` | S2.3 |
 | `test_globs` | list of globs | `tests/**/*`, `test/**/*`, `**/*_test.*`, `**/*.test.*`, `**/test_*.py` | S2.1, S6.5 |
 | `drift_exclude` | list of globs | see S2.6 | S2.6 |
 | `always_protected` | list of globs, additive | see S6.6 | S6.5 |
-| `protected.<role>` | list of globs, additive | builder, test-author, property-tester defaults | S6.5 |
+| `protected.<role>` | list of globs, additive | builder `specs/**`, `.sparkwright/config.yaml`, `AGENTS.md`, `personas/**`; test-author and property-tester `src/**`, `specs/**` | S6.5 |
 
 The red check runs the whole `checks.test` command in the workspace after the
 Test Author's commit (S5.2). It must exit non-zero; an import error of the code
@@ -343,10 +391,10 @@ runner itself missing) does not.
 | V5 | S6.1, S6.2, S6.4, S6.6, S6.10, S6.11 |
 | V6 | S7.1–S7.7 |
 | V7 | S4.3, S8.1–S8.4, S11.1 |
-| V8 | S2.4, S6.3, S6.5, S6.9, S6.10, S6.11, S9.2 |
+| V8 | S2.4, S6.3, S6.5, S6.9, S6.11, S8.5, S9.2 |
 | V9 | S4.4, S4.5, S9.3, S10.1–S10.3 |
 | V10 | S1.5, S1.7, S2.7, S2.9, S3.11, S6.8, S11.4 |
-| V11 | S4.6, S6.7, S11.3, S11.5, S11.6, S11.7 |
+| V11 | S4.6, S6.7, S6.10, S11.3, S11.5, S11.6, S11.7 |
 
 ## Open questions
 
