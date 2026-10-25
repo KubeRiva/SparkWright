@@ -193,3 +193,55 @@
 {"event": "reviewed", "id": "S11.5", "reason": "R008 f48204c846cf4cdb9a98801f5c92b1a84836e6d8f4c9d5bafac43baab726a9a7", "run": "20261025-035418-review-c98a00", "time": "2026-10-25T03:57:58.064051+00:00"}
 {"event": "reviewed", "id": "S11.6", "reason": "R008 8d9ea65a874e9feaa2f956b4241ce0486110c7e23c523f807652058dfcb731bd", "run": "20261025-035418-review-c98a00", "time": "2026-10-25T03:57:58.064110+00:00"}
 {"event": "reviewed", "id": "S11.7", "reason": "R008 ae86925edf0cc9d086c50435bd900be086df35cbeaad99d1554398dd3356984b", "run": "20261025-035418-review-c98a00", "time": "2026-10-25T03:57:58.064134+00:00"}
+{"event": "changed", "id": "S1.1", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981700+00:00"}
+{"event": "changed", "id": "S1.7", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981734+00:00"}
+{"event": "changed", "id": "S1.8", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981740+00:00"}
+{"event": "changed", "id": "S2.3", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981745+00:00"}
+{"event": "changed", "id": "S2.4", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981749+00:00"}
+{"event": "changed", "id": "S2.8", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981753+00:00"}
+{"event": "changed", "id": "S2.9", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981757+00:00"}
+{"event": "changed", "id": "S3.3", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981761+00:00"}
+{"event": "changed", "id": "S3.4", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981766+00:00"}
+{"event": "changed", "id": "S3.6", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981770+00:00"}
+{"event": "changed", "id": "S3.7", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981774+00:00"}
+{"event": "changed", "id": "S3.11", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981779+00:00"}
+{"event": "changed", "id": "S4.5", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981783+00:00"}
+{"event": "changed", "id": "S5.3", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981787+00:00"}
+{"event": "changed", "id": "S6.1", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981791+00:00"}
+{"event": "changed", "id": "S6.3", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981795+00:00"}
+{"event": "changed", "id": "S6.5", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981799+00:00"}
+{"event": "changed", "id": "S6.6", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981803+00:00"}
+{"event": "changed", "id": "S6.7", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981808+00:00"}
+{"event": "changed", "id": "S6.8", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981812+00:00"}
+{"event": "changed", "id": "S6.9", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981816+00:00"}
+{"event": "changed", "id": "S6.10", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981820+00:00"}
+{"event": "changed", "id": "S7.4", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981824+00:00"}
+{"event": "changed", "id": "S7.5", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981828+00:00"}
+{"event": "changed", "id": "S10.2", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981832+00:00"}
+{"event": "changed", "id": "S11.3", "reason": "CR4 applied", "time": "2026-10-25T04:26:32.981837+00:00"}
+{"event": "cr-applied", "id": "S1.1", "reason": "CR4", "time": "2026-10-25T04:26:32.989629+00:00"}
+{"event": "cr-applied", "id": "S1.7", "reason": "CR4", "time": "2026-10-25T04:26:32.989657+00:00"}
+{"event": "cr-applied", "id": "S1.8", "reason": "CR4", "time": "2026-10-25T04:26:32.989663+00:00"}
+{"event": "cr-applied", "id": "S2.3", "reason": "CR4", "time": "2026-10-25T04:26:32.989668+00:00"}
+{"event": "cr-applied", "id": "S2.4", "reason": "CR4", "time": "2026-10-25T04:26:32.989673+00:00"}
+{"event": "cr-applied", "id": "S2.8", "reason": "CR4", "time": "2026-10-25T04:26:32.989677+00:00"}
+{"event": "cr-applied", "id": "S2.9", "reason": "CR4", "time": "2026-10-25T04:26:32.989681+00:00"}
+{"event": "cr-applied", "id": "S3.3", "reason": "CR4", "time": "2026-10-25T04:26:32.989685+00:00"}
+{"event": "cr-applied", "id": "S3.4", "reason": "CR4", "time": "2026-10-25T04:26:32.989689+00:00"}
+{"event": "cr-applied", "id": "S3.6", "reason": "CR4", "time": "2026-10-25T04:26:32.989693+00:00"}
+{"event": "cr-applied", "id": "S3.7", "reason": "CR4", "time": "2026-10-25T04:26:32.989697+00:00"}
+{"event": "cr-applied", "id": "S3.11", "reason": "CR4", "time": "2026-10-25T04:26:32.989702+00:00"}
+{"event": "cr-applied", "id": "S4.5", "reason": "CR4", "time": "2026-10-25T04:26:32.989706+00:00"}
+{"event": "cr-applied", "id": "S5.3", "reason": "CR4", "time": "2026-10-25T04:26:32.989711+00:00"}
+{"event": "cr-applied", "id": "S6.1", "reason": "CR4", "time": "2026-10-25T04:26:32.989714+00:00"}
+{"event": "cr-applied", "id": "S6.3", "reason": "CR4", "time": "2026-10-25T04:26:32.989718+00:00"}
+{"event": "cr-applied", "id": "S6.5", "reason": "CR4", "time": "2026-10-25T04:26:32.989722+00:00"}
+{"event": "cr-applied", "id": "S6.6", "reason": "CR4", "time": "2026-10-25T04:26:32.989727+00:00"}
+{"event": "cr-applied", "id": "S6.7", "reason": "CR4", "time": "2026-10-25T04:26:32.989731+00:00"}
+{"event": "cr-applied", "id": "S6.8", "reason": "CR4", "time": "2026-10-25T04:26:32.989735+00:00"}
+{"event": "cr-applied", "id": "S6.9", "reason": "CR4", "time": "2026-10-25T04:26:32.989739+00:00"}
+{"event": "cr-applied", "id": "S6.10", "reason": "CR4", "time": "2026-10-25T04:26:32.989743+00:00"}
+{"event": "cr-applied", "id": "S7.4", "reason": "CR4", "time": "2026-10-25T04:26:32.989748+00:00"}
+{"event": "cr-applied", "id": "S7.5", "reason": "CR4", "time": "2026-10-25T04:26:32.989751+00:00"}
+{"event": "cr-applied", "id": "S10.2", "reason": "CR4", "time": "2026-10-25T04:26:32.989756+00:00"}
+{"event": "cr-applied", "id": "S11.3", "reason": "CR4", "time": "2026-10-25T04:26:32.989760+00:00"}
