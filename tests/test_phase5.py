@@ -385,7 +385,7 @@ class TestCalibration(unittest.TestCase):
             self.assertEqual(st["coverage-auditor"]["false_alarm_rate"], 0.0)
             self.assertEqual(st["newcomer"]["catch_rate"], 0.0)
             self.assertEqual(st["security-reviewer"]["false_alarm_rate"], 1.0)
-            report = (r / "specs/reviews/calibration.md").read_text()
+            report = (r / "specs/calibration/calibration.md").read_text()
             self.assertIn("| coverage-auditor | configured |", report)
             # S10.3: newcomer is proposed for disabling, as a config change for a human
             self.assertEqual(out["propose_disable"], ["newcomer"])

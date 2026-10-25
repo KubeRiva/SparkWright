@@ -113,6 +113,8 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for e in cfg_errors:
         add("error", "config.invalid", e, file=config_mod.CONFIG_PATH)
 
+    for msg in weakened_config(cfg):
+        add("warning", "config.weakened", msg, file=config_mod.CONFIG_PATH)
     repo = store.load(root)
     if not repo.files:
         add("error", "store.empty", "no spec files found under specs/")
@@ -326,12 +328,15 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                         add("error", "role.path-violation", f"commit {short} by role 'runner' changes {path}; the runner may only change {RUNNER_PATHS}", file=path)
                 continue
             forbidden = list(cfg.get("protected", {}).get(c.role, [])) + list(cfg.get("always_protected", []))
+            cr_rebuild = c.role == "test-author" and c.tasks and all(
+                getattr(latest.get(t), "change_request", None) in valid_crs for t in c.tasks)  # D009: rebuild after a CR
             for path in c.files:
-                if _glob_match(path, forbidden) or (path in lock_idx and lock_idx[path] < commit_pos[c.sha]):
+                relocking = cr_rebuild and path in lock_idx and not _glob_match(path, forbidden)
+                if _glob_match(path, forbidden) or (path in lock_idx and lock_idx[path] < commit_pos[c.sha] and not relocking):
                     add("error", "role.path-violation", f"commit {short} by role '{c.role}' changes protected path {path}", file=path)
 
     if no_approver_hits:
-        add("warning", "protected.no-approvers", f"{len(no_approver_hits)} commit(s) changed protected files, but no "
+        add("error", "protected.no-approvers", f"{len(no_approver_hits)} commit(s) changed protected files, but no "
             f"`approvers` are configured, so nobody's authorship can be checked; add yourself under `approvers` (S6.5)")
     if gitlog.is_repo(root) and not any(f.code == "git.log-failed" for f in findings):
         _verify_approvals(root, cfg, add, {c.sha: c.role for c in commits}, signed_after,
@@ -397,6 +402,22 @@ def _lock_positions(root: Path, cfg: dict, commits: list, entries: list) -> dict
             committed.add(aid[5:])
     for path in committed - after_baseline:
         out[path] = -1
+    return out
+
+
+def weakened_config(cfg: dict) -> list[str]:
+    """D009 (S6.8): settings that switch off a protection without touching a named gate."""
+    out = []
+    for key in ("drift_exclude", "test_globs"):
+        if any(str(g).strip() in ("**", "*", "**/*") for g in cfg.get(key) or []):
+            out.append(f"`{key}` contains a catch-all glob, which switches off "
+                       f"{'drift detection' if key == 'drift_exclude' else 'the line between tests and code'}")
+    if cfg.get("trailers") == "off":
+        out.append("`trailers: off` stops checking that every commit names its task (V1)")
+    if signing_mode(cfg) == "off":
+        out.append("`require_signed: false`: approvals rest on git author emails alone, which anyone can set")
+    if (cfg.get("mutation") or {}).get("allow_not_run"):
+        out.append("`mutation.allow_not_run: true`: tasks may be locked without mutation testing")
     return out
 
 

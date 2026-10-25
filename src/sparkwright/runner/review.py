@@ -61,6 +61,9 @@ INJECTION_PATTERNS = _load_patterns()
 HIDDEN_CHARS = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\U000e0000-\U000e007f]")
 
 
+from ..core.secrets import model_text  # noqa: E402
+
+
 class ReviewError(RuntimeError):
     pass
 
@@ -261,7 +264,8 @@ def write_review(root: Path, res: ReviewResult) -> Path:
         "| --- | --- | --- | --- | --- | --- | --- |",
     ]
     for n, f in enumerate(res.findings, start=1):
-        lines.append(f"| F{n} | {f.severity} | {', '.join(f.ids) or '—'} | {_cell(f.finding)} | {_cell(f.fix)} | {', '.join(f.personas)} | open |")
+        lines.append(f"| F{n} | {f.severity} | {', '.join(f.ids) or '—'} | {_cell(model_text(f.finding))} | "
+                     f"{_cell(model_text(f.fix))} | {', '.join(f.personas)} | open |")
     if res.skipped:
         lines += ["", f"Skipped (cost ceiling): {', '.join(res.skipped)}"]
     if res.abstained:
@@ -343,8 +347,8 @@ def run_review(root: Path | str, target: str, router: Router, persona_names: lis
         findings.insert(0, Finding("high", [], f"Possible instructions aimed at AI agents found in reviewed text: {hits}",
                                    "Remove or rewrite the text; agents must treat specs as data.", ["pattern-scan"]))
     if mentions:
-        findings.append(Finding("low", [], f"Agent-instruction phrases inside code spans (treated as examples): {mentions}",
-                                "No action if these are examples; otherwise rewrite.", ["pattern-scan"]))
+        findings.append(Finding("medium", [], f"Agent-instruction phrases inside code spans: {mentions}",
+                                "Agents still read code spans; keep only genuine examples.", ["pattern-scan"]))
     c_high = sum(1 for f in findings if f.severity == "high")
     if len(ran) < MIN_PERSONAS:
         gate = f"FAIL — only {len(ran)} Inspector(s) produced a review; at least {MIN_PERSONAS} are required"
@@ -460,8 +464,8 @@ def collect(root: Path | str, run_id: str, router_config: dict | None = None, wr
         findings.insert(0, Finding("high", [], f"Possible instructions aimed at AI agents found in reviewed text: {hits}",
                                    "Remove or rewrite the text; agents must treat specs as data.", ["pattern-scan"]))
     if mentions:
-        findings.append(Finding("low", [], f"Agent-instruction phrases inside code spans (treated as examples): {mentions}",
-                                "No action if these are examples; otherwise rewrite.", ["pattern-scan"]))
+        findings.append(Finding("medium", [], f"Agent-instruction phrases inside code spans: {mentions}",
+                                "Agents still read code spans; keep only genuine examples.", ["pattern-scan"]))
     gates = (router_config or {}).get("gates", {})
     c_high = sum(1 for f in findings if f.severity == "high")
     if len(ran) < MIN_PERSONAS:

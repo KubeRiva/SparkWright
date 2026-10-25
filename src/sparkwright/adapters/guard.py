@@ -56,10 +56,45 @@ def decide_path(root, target):
         return "deny", f"{rel} is a locked test; changing it needs an approved change request."
     if rel in {norm(h) for h in HUMAN_GATED} or rel.lower() in HUMAN_GATED or rel.startswith(GATED_PREFIXES):
         return "ask", f"{rel} is human-gated in SparkWright; confirm this change."
+    if ws is None and strict(root) and not exempt(root, rel):
+        return "deny", (f"SparkWright strict mode: {rel} may only change inside a task build. Find or draft the task "
+                        f"that covers it, have the user approve it, then run `sparkwright build <task> --next` "
+                        f"(or open a change request with `sparkwright change new <ID>`).")
     return None, ""
 
 
-def decide_bash(cmd):
+_CFG = {}
+
+
+def _config(root):
+    key = str(root)
+    if key not in _CFG:
+        try:
+            from sparkwright.core import config as config_mod
+            _CFG[key] = config_mod.load(root)[0]
+        except Exception:  # noqa: BLE001 - a guard must never crash the host
+            _CFG[key] = {}
+    return _CFG[key]
+
+
+def strict(root):
+    """D009 (S8.5): `guard: {strict: true}` keeps agents out of code that no task build covers."""
+    return bool((_config(root).get("guard") or {}).get("strict"))
+
+
+def exempt(root, rel):
+    """Files that never need a task (the drift-exempt list, S2.6), e.g. specs and Markdown."""
+    import fnmatch
+    globs = _config(root).get("drift_exclude") or ["specs/**", ".sparkwright/**", "*.md", ".gitignore", ".gitattributes",
+                                                     "LICENSE", "NOTICE", "personas/**", "templates/**"]
+    for g in globs:
+        g = norm(g)
+        if fnmatch.fnmatch(rel, g) or (g.endswith("/**") and (rel == g[:-3] or rel.startswith(g[:-2]))):
+            return True
+    return False
+
+
+def decide_bash(cmd, root=None):
     if re.search(r"approv[^\s/]*\.jsonl|approv\w*\*|events\.jsonl|\.sparkwright/runs/[^\s'\"]*\.jsonl|\.sparkwright/ledger", cmd, re.I):
         return "deny", "Agents may not touch approvals, events or SparkWright run state."
     if re.search(r"\bsparkwright\b[^|;&\n]*\bapprove\b", cmd, re.I):
@@ -67,6 +102,10 @@ def decide_bash(cmd):
     if re.search(r"constitution\.md|\.sparkwright/config\.yaml|AGENTS\.md|CLAUDE\.md|GEMINI\.md|\.claude/|\.codex/|"
                  r"\.agents/|\.gemini/|personas/", cmd, re.I):
         return "ask", "This command touches a SparkWright human-gated file; confirm it."
+    if root is not None and strict(root) and re.search(r"\bgit\b[^|;&\n]*\bcommit\b", cmd) \
+            and "SparkWright-Task" not in cmd and "sparkwright" not in cmd.lower():
+        return "ask", ("SparkWright strict mode: commits should name their task (SparkWright-Task trailer) or come "
+                       "from a task build; confirm this commit with the user.")
     return None, ""
 
 
@@ -100,7 +139,7 @@ def decide(host, root, tool_name, tool_input):
     kind, values = _targets(host, tool_name, tool_input or {})
     best = (None, "")
     for v in values:
-        d = decide_bash(v) if kind == "bash" else decide_path(root, v)
+        d = decide_bash(v, root) if kind == "bash" else decide_path(root, v)
         if RANK[d[0]] > RANK[best[0]]:
             best = d
     return best

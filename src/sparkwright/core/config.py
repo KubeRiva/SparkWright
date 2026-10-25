@@ -20,20 +20,25 @@ DEFAULTS: dict = {
     "python": None,            # interpreter for the Library Checker (default: the one running sparkwright)
     "mutation": {"min": 0.8, "time_budget_s": 300},
     "calibration": {"min_catch_rate": 0.5},   # S10.3
-    "security_review": {"min_changed_lines": 20},  # D006: high-risk builds with smaller source diffs skip it
+    "security_review": {"min_changed_lines": 20, "paths": []},  # paths: globs that always trigger it  # D006: high-risk builds with smaller source diffs skip it
     "review": {"disabled": []},               # personas a human removed from default reviews after calibration
     "approvers": [],           # [{name, email, signing_key?}] allowed to approve (S6.3, D002, D007)
     "require_signed": "high-risk",   # D007: false | "high-risk" | true; enforced for commits after `signing_from`
     "signing_from": None,          # commit after which signing is enforced (set it once signing is configured)
-    "sandbox": {"keep_env": []},
-    "log_waivers": [],             # D007: commits an approver excused from the append-only rule (config is protected)   # D007: secrets are removed from AI-written code's environment; keep_env re-allows names
+    "sandbox": {"keep_env": [], "isolate_home": True, "network": True},  # D009: see S6.10
+    "log_waivers": [],         # D007: commits an approver excused from the append-only rule (config is protected)
+    "guard": {"strict": False},  # D009: true = host agents may change code only inside a task build (S8.5)
     "baseline": None,          # commit hash; trailer/drift checks apply after it
     "trailers": "required",    # required | warn | off
     "test_globs": ["tests/**/*", "test/**/*", "**/*_test.*", "**/*.test.*", "**/test_*.py"],
     # Paths no agent role may change, whatever the config says (S6.5, S6.6).
     "always_protected": [".sparkwright/config.yaml", "specs/approvals.jsonl", "specs/constitution.md",
                          "AGENTS.md", "CLAUDE.md", "GEMINI.md", ".claude/**", ".codex/**", ".agents/**", ".gemini/**",
-                         "personas/**"],
+                         "personas/**",
+                         # D009: CI, hooks and other agents' instruction or tool files
+                         ".github/workflows/**", ".github/copilot-instructions.md", ".gitlab-ci.yml", ".githooks/**",
+                         ".husky/**", ".pre-commit-config.yaml", ".cursorrules", ".cursor/**", ".windsurfrules",
+                         ".mcp.json", ".vscode/settings.json"],
     "protected": {
         "builder": ["specs/**", ".sparkwright/config.yaml", "AGENTS.md", "personas/**"],
         "test-author": ["src/**", "specs/**"],

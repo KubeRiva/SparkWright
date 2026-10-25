@@ -161,7 +161,8 @@ class Build:
         self.test_cmd = (self.cfg.get("checks") or {}).get("test")
         if not self.test_cmd:
             raise BuildError("set checks.test in .sparkwright/config.yaml so builds can run tests")
-        self.env = command_env(self.cfg.get("env"), self.root, (self.cfg.get("sandbox") or {}).get("keep_env"))
+        self.env = command_env(self.cfg.get("env"), self.root, (self.cfg.get("sandbox") or {}).get("keep_env"),
+                               self.cfg.get("sandbox") or {})
         self.prove = bool(self.req.extras.get("prove"))
         if self.prove and not self.cfg.get("prove"):
             raise BuildError(f"task {self.task} sets prove: true; set `prove:` in .sparkwright/config.yaml to the "
@@ -195,19 +196,24 @@ class Build:
         self.state = st
 
     def _security_required(self) -> bool:
-        """D006: high-risk builds get a Security Reviewer unless the source diff is test-only or tiny."""
-        if not self.high_risk:
-            return False
+        """D006: high-risk builds get a Security Reviewer unless the source diff is test-only or tiny.
+        D009: any build touching `security_review.paths` gets one too, so splitting a change into small diffs
+        does not avoid it."""
         if "security_required" in self.state.result:
             return bool(self.state.result["security_required"])
+        if not self.state.workspace:
+            return self.high_risk
         ws = Path(self.state.workspace)
-        lines = 0
+        lines, touched = 0, []
         for row in _git(ws, "diff", "--numstat", self.state.base, "HEAD", "--").splitlines():
             parts = row.split("\t")
             if len(parts) == 3 and not parts[2].startswith("specs/") and not _match(parts[2], self.test_globs):
                 lines += (int(parts[0]) if parts[0].isdigit() else 0) + (int(parts[1]) if parts[1].isdigit() else 0)
-        minimum = int((self.cfg.get("security_review") or {}).get("min_changed_lines", 20) or 0)
-        required = lines >= minimum and lines > 0
+                touched.append(parts[2])
+        scfg = self.cfg.get("security_review") or {}
+        minimum = int(scfg.get("min_changed_lines", 20) or 0)
+        sensitive = [f for f in touched if _match(f, list(scfg.get("paths") or []))]
+        required = bool(sensitive) or (self.high_risk and lines >= minimum and lines > 0)
         self.state.result["security_required"] = required
         self.state.result["source_lines_changed"] = lines
         return required
@@ -243,6 +249,12 @@ class Build:
         self._open_run()
 
     # ---- locked tests
+    def _cr_rebuild(self) -> bool:
+        """The task's current approval came with a change request (it is being rebuilt after a spec change)."""
+        latest = approvals_mod.latest(approvals_mod.read(self.root)[0])
+        appr = latest.get(self.task)
+        return bool(appr and appr.change_request)
+
     def _locked_at(self, rev: str) -> dict[str, str]:
         data = _git_bytes(Path(self.state.workspace), "show", f"{rev}:{approvals_mod.APPROVALS_PATH}") or b""
         locked = {}
@@ -344,7 +356,8 @@ class Build:
         cr = f"CR{n}"
         path = self.root / "specs" / "changes" / f"{cr}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
-        reason = str(defect.get("reason", "")).strip()[:2000]
+        from ..core.secrets import model_text
+        reason = model_text(str(defect.get("reason", "")).strip()[:2000])
         path.write_text(
             f"---\nid: {cr}\ntitle: Spec defect found while building {self.task}\ntype: change\nstatus: open\n"
             f"target: {target}\nraised_by: {role}\nrounds: 0\n---\n\n## Reason\n\n{reason}\n\n"
@@ -359,6 +372,8 @@ class Build:
     def _allowed(self, role: str, path: str, deleted: bool, locked: set[str]) -> bool:
         if safe_relpath(path) is None or path.startswith("specs/"):
             return False
+        if _match(path.lower(), [g.lower() for g in self.cfg.get("always_protected", [])]):
+            return False  # S6.5: enforced at write time too, whatever a task's `files` globs say
         if role == "property-tester":
             name = PurePosixPath(path).name
             if not name.startswith("test_") or name in ("conftest.py", "__init__.py"):
@@ -383,7 +398,11 @@ class Build:
         bad = []
         for code, path in _status(ws):
             deleted = "D" in code
-            if not self._allowed(role, path, deleted, locked):
+            if not deleted and (ws / path).is_symlink():  # S6.5: a symlink could point outside the workspace
+                allowed = False
+            else:
+                allowed = self._allowed(role, path, deleted, locked)
+            if not allowed:
                 bad.append(path)
                 _git(ws, "reset", "-q", st.step_head, "--", path, check=False)
                 if path in tracked:
@@ -402,7 +421,11 @@ class Build:
         locked = set(self._locked_at(st.base))
         if role == "property-tester":  # may only add new test files: every tracked file is off limits
             locked |= set(_git(ws, "ls-tree", "-r", "--name-only", st.step_head).splitlines())
-        elif role == "test-author":  # later Test Author rounds may not rewrite the property tests
+        if role == "test-author" and self._cr_rebuild():  # S2.4/S3.9: a CR re-approved this task; its own tests may change
+            mine = [p for p in locked if f"sparkwright: {self.task}" in
+                    (_git_bytes(ws, "show", f"{st.base}:{p}") or b"").decode("utf-8", "replace")]
+            locked -= set(mine)
+        if role == "test-author":  # later Test Author rounds may not rewrite the property tests
             for sha, subj, r in self._role_commits():
                 if r == "property-tester" and subj.endswith(": property tests (red)"):
                     locked |= set(_git(ws, "show", "--name-only", "--format=", sha).splitlines())
@@ -792,8 +815,20 @@ class Build:
         if not rep.baseline_ok:
             self._builder_retry("Tests do not pass", rep.message)
             return
-        if rep.total == 0 and rep.changed_source:
-            st.result["mutation_note"] = "no mutants could be generated; mutation evidence is absent"
+        if rep.total == 0:  # F4/D009: no mutants is "not run", never a pass
+            changed = _git(Path(st.workspace), "diff", "--name-only", st.base, "HEAD").splitlines()
+            source = [f for f in changed if not _match(f, self.test_globs) and not f.startswith("specs/")]
+            st.result["mutation"] = "not-run"
+            if not source:
+                st.result["mutation_note"] = "not run: this task changed no source files (test-only or already implemented)"
+            elif (self.cfg.get("mutation") or {}).get("allow_not_run"):
+                st.result["mutation_note"] = (f"not run: no mutants for {source[:5]}; allowed by "
+                                              f"mutation.allow_not_run in the protected config")
+            else:
+                self._block(f"Mutation testing could not run on {source[:5]} (v1 mutates Python only, or nothing in "
+                            f"the diff can be mutated). An approver can accept this for the project by setting "
+                            f"`mutation: {{allow_not_run: true}}` in .sparkwright/config.yaml, then restart the build.")
+                return
         elif rep.score < minimum:
             st.rounds["saboteur"] += 1
             if st.rounds["saboteur"] > MAX_ROUNDS:
@@ -936,7 +971,9 @@ class Build:
             return
         st.result["mutation_score"] = round(score, 3) if total else None
         st.result.pop("gate_cache", None)
-        gate = f"Gate: red=confirmed checks=green mutation={st.result['mutation_score']}\n"
+        mut = st.result["mutation_score"] if total else "not-run"
+        note = f"Mutation: {st.result['mutation_note']}\n" if not total and st.result.get("mutation_note") else ""
+        gate = f"Gate: red=confirmed checks=green mutation={mut}\n{note}"
         _commit(ws, self.task, "runner", "ready", [], extra=gate, allow_empty=True)
         self._enter("ready")
         self._save("ready for human merge")

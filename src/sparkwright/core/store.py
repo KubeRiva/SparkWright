@@ -62,6 +62,27 @@ def _rel(root: Path, p: Path) -> str:
     return p.relative_to(root).as_posix()
 
 
+def _attach_criteria(meta: dict, body: str, reqs: list) -> None:
+    if meta.get("type") == "task":
+        m = re.search(r"^#{2,3}[ \t]+acceptance criteria[ \t]*\n(.*?)(?=^#{1,3}[ \t]|\Z)", body, re.M | re.S | re.I)
+        for r in reqs:
+            if r.kind == "task":
+                r.criteria = m.group(1).strip() if m else ""
+
+
+def requirements_in(text: str, rel: str) -> dict[str, Requirement]:
+    """Requirements defined by one spec file's text (for example the file as it was at an older commit)."""
+    try:
+        meta, body, first = split(text)
+    except FrontMatterError:
+        return {}
+    if (meta or {}).get("type") in ("change", "review"):
+        return {}
+    reqs, _ = parse_body(body, rel, first)
+    _attach_criteria(meta or {}, body, reqs)
+    return {r.id: r for r in reqs}
+
+
 def load(root: Path | str) -> Repo:
     root = Path(root).resolve()
     spec_dir = root / "specs"
@@ -96,11 +117,7 @@ def load(root: Path | str) -> Repo:
         reqs, issues = parse_body(body, rel, first)
         if meta.get("type") in ("change", "review"):
             reqs = []  # quoted requirement lines in change requests and reviews are not definitions
-        if meta.get("type") == "task":
-            m = re.search(r"^#{2,3}[ \t]+acceptance criteria[ \t]*\n(.*?)(?=^#{1,3}[ \t]|\Z)", body, re.M | re.S | re.I)
-            for r in reqs:
-                if r.kind == "task":
-                    r.criteria = m.group(1).strip() if m else ""
+        _attach_criteria(meta, body, reqs)
         sf.requirements, sf.issues = reqs, sf.issues + issues
         files.append(sf)
         if meta.get("type") == "evidence" and sf.id and ids.kind_of(sf.id) == "evidence":

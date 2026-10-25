@@ -102,13 +102,35 @@ class TestStrongerLock(unittest.TestCase):
             lines = [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
             for d in lines:
                 d.pop("hash2", None)
-            p.write_text("".join(json.dumps(d) + "\n" for d in lines))
+            p.write_text("".join(json.dumps(d, sort_keys=True) + "\n" for d in lines))
+            commit(r, "legacy approvals")
             self.assertIn("approval.legacy-lock", codes(r))
             code, out = run_cli(r, "approve", "S1.1", "--as", "Srikanth")
             self.assertEqual(code, 0, out)
             last = json.loads(p.read_text().splitlines()[-1])
             self.assertEqual(last["id"], "S1.1")
             self.assertIn("hash2", last)
+
+
+class TestLegacyRefreshNeedsUnchangedLinks(unittest.TestCase):
+    def test_refresh_is_refused_when_links_changed_since_approval(self):
+        with TempRepo() as r:
+            repo(r)
+            write(r, "specs/vision.md", spec("VISION", "vision",
+                  "- **V1** [E1] When asked, the system shall trace.\n- **V2** [E1] It shall log.\n"))
+            commit(r, "v2")
+            run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+            p = r / "specs/approvals.jsonl"
+            rows = [json.loads(x) for x in p.read_text().splitlines() if x.strip()]
+            for d in rows:
+                d.pop("hash2", None)
+            p.write_text("".join(json.dumps(d, sort_keys=True) + "\n" for d in rows))
+            commit(r, "legacy approvals")
+            s = r / "specs/system.md"
+            s.write_text(s.read_text().replace("[V1]", "[V2]"))
+            code, out = run_cli(r, "approve", "S1.1", "--as", "Srikanth")
+            self.assertNotEqual(code, 0)
+            self.assertEqual(out["data"].get("needs_change_request"), ["S1.1"])
 
 
 class TestProtectedFiles(unittest.TestCase):

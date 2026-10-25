@@ -79,7 +79,8 @@ def check(root: Path | str, files: list[str], python: str = sys.executable, env:
     if not wanted:
         return []
     req = {m: sorted(a) for m, a in wanted.items()}
-    r = subprocess.run([python, "-c", PROBE, json.dumps(req)], capture_output=True, text=True, encoding="utf-8",
+    from .verify import sandboxed
+    r = subprocess.run(sandboxed([python, "-c", PROBE, json.dumps(req)], env), capture_output=True, text=True, encoding="utf-8",
                        errors="replace", cwd=root, timeout=120, env=env)
     if r.returncode != 0:
         return [LibIssue(files[0] if files else "", 1, f"library probe failed: {r.stderr.strip()[:300]}")]

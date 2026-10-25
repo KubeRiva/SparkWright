@@ -1,7 +1,7 @@
 """Reviewer calibration (SYSTEM S10.1–S10.3).
 
 Runs each Inspector persona on a suite of review contexts with planted flaws (and clean controls),
-scores catch rate and false-alarm rate per persona and tier, writes specs/reviews/calibration.md,
+scores catch rate and false-alarm rate per persona and tier, writes specs/calibration/<date>.md,
 and proposes disabling weak personas as a config change a human must make.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .router import Router
 
 INSPECTORS = ["coverage-auditor", "contradiction-hunter", "newcomer", "devils-advocate",
               "buildability-checker", "security-reviewer"]
-REPORT = "specs/reviews/calibration.md"
+REPORT = "specs/calibration/calibration.md"  # D009: not a review file (S6.5, S6.11)
 
 
 class CalibrationError(RuntimeError):

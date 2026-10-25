@@ -46,13 +46,47 @@ def scrub(env: dict, keep: list[str] | None = None) -> dict:
     return {k: v for k, v in env.items() if k.upper() in keep_set or not SECRET_RE.search(k)}
 
 
-def command_env(env: dict | None, repo: Path | str | None = None, keep: list[str] | None = None) -> dict:
-    """os.environ without secrets, plus config `env:` values; `{repo}` in a value is the main repository root."""
+NO_NET = "SPARKWRIGHT_SANDBOX_NO_NET"
+
+
+def command_env(env: dict | None, repo: Path | str | None = None, keep: list[str] | None = None,
+                sandbox: dict | None = None) -> dict:
+    """os.environ without secrets, plus config `env:` values; `{repo}` in a value is the main repository root.
+
+    D009 (S6.10): with `sandbox.isolate_home` (default on) HOME and USERPROFILE point at an empty folder, so
+    AI-written code does not find credentials kept in the user's home folder at their usual paths; with
+    `sandbox.network: false` commands run without network where the OS allows it (Linux `unshare -rn`)."""
+    sb = sandbox if sandbox is not None else {}
     out = scrub(dict(os.environ), keep)
+    if sb.get("isolate_home", True):
+        import hashlib
+        import tempfile
+        tag = hashlib.sha256(str(Path(repo).resolve() if repo else "").encode("utf-8")).hexdigest()[:12]
+        home = Path(tempfile.gettempdir()) / f"sparkwright-home-{tag}"
+        home.mkdir(parents=True, exist_ok=True)
+        for k in ("HOME", "USERPROFILE"):
+            if k in out or k == "HOME":
+                out[k] = str(home)
+        for k in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "APPDATA", "LOCALAPPDATA"):
+            out.pop(k, None)
+        out.setdefault("GIT_CONFIG_NOSYSTEM", "1")
+    if sb.get("network", True) is False:
+        out[NO_NET] = "1"
     for k, v in (env or {}).items():
         out[str(k)] = str(v).replace("{repo}", str(Path(repo).resolve()) if repo else "")
     out.setdefault("PYTHONIOENCODING", "utf-8")
     return out
+
+
+def sandboxed(argv: list[str], env: dict | None) -> list[str]:
+    """Prefix argv to cut network access when the sandbox asks for it and the OS supports it."""
+    if env and env.get(NO_NET) == "1":
+        import shutil
+        import sys
+        if sys.platform.startswith("linux") and shutil.which("unshare"):
+            return ["unshare", "-rn", *argv]
+        raise OSError("sandbox.network is false but this system cannot cut network access (needs Linux `unshare`)")
+    return argv
 
 
 def run_checks(root: Path | str, checks: dict, timeout: float = 900, only: list[str] | None = None,
@@ -62,7 +96,7 @@ def run_checks(root: Path | str, checks: dict, timeout: float = 900, only: list[
         if only and name not in only:
             continue
         try:
-            r = subprocess.run(split_cmd(str(cmd)), cwd=root, capture_output=True, text=True,
+            r = subprocess.run(sandboxed(split_cmd(str(cmd)), env), cwd=root, capture_output=True, text=True,
                                encoding="utf-8", errors="replace", timeout=timeout, env=env)
             text = ((r.stdout or "") + (r.stderr or ""))[-4000:]
             out.append(CheckResult(name, str(cmd), r.returncode == 0, text))

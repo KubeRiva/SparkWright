@@ -33,3 +33,12 @@ def redact(text: str) -> str:
         if v in text:
             text = text.replace(v, MASK)
     return _TOKEN_RE.sub(MASK, text)
+
+
+_HIDDEN = re.compile("[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff\U000e0000-\U000e007f]")
+
+
+def model_text(text: str) -> str:
+    """D009 (S4.6, S11.3): text written by a model into specs/ loses hidden characters and secrets; it is quoted
+    data when a later agent reads it, and the review scan still checks it like any other spec text."""
+    return redact(_HIDDEN.sub("", str(text or "")))

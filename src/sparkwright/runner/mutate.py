@@ -147,9 +147,9 @@ class TestCommandError(RuntimeError):
 
 
 def _run(cmd: str, cwd: Path, timeout: float, env: dict | None = None) -> bool:
-    from .verify import split_cmd
+    from .verify import split_cmd, sandboxed
     try:
-        r = subprocess.run(split_cmd(cmd), cwd=cwd, capture_output=True, timeout=timeout, env=env)
+        r = subprocess.run(sandboxed(split_cmd(cmd), env), cwd=cwd, capture_output=True, timeout=timeout, env=env)
         return r.returncode == 0
     except subprocess.TimeoutExpired:
         return False  # a hang counts as the tests catching the mutant

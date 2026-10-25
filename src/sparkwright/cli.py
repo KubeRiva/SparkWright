@@ -113,6 +113,13 @@ def cmd_status(args) -> int:
                     cost += float(json.loads(line).get("cost_usd", 0) or 0)
                 except (json.JSONDecodeError, ValueError, AttributeError):
                     pass
+    mode = checks.signing_mode(res.config)
+    if not res.config.get("approvers"):
+        trust = "none: no approvers configured, so no approval counts"
+    elif mode == "off" or not res.config.get("signing_from"):
+        trust = "advisory: approvals rest on git author emails, which anyone can set; turn on commit signing (D007)"
+    else:
+        trust = f"verified by signatures for {'all' if mode == 'all' else 'high-risk'} approvals after {str(res.config['signing_from'])[:12]}"
     order = ["evidence"] + ids.PYRAMID
     lines = ["Levels:"]
     for k in order:
@@ -126,9 +133,11 @@ def cmd_status(args) -> int:
         f"Reviews on file:    {len(reviews)} ({open_findings} open findings)",
         f"Agent cost so far:  ${cost:.2f}",
         f"Check:              {'PASS' if res.ok else 'FAIL'} ({res.counts()['error']} errors)",
+        f"Approver identity:  {trust}",
     ]
     data = {"levels": levels, "gaps": len(gaps), "drift": len(drift), "approval_problems": len(locks),
-            "reviews": reviews, "open_findings": open_findings, "cost_usd": round(cost, 4), "check_ok": res.ok}
+            "reviews": reviews, "open_findings": open_findings, "cost_usd": round(cost, 4), "check_ok": res.ok,
+            "approver_identity": trust}
     print_ok = True  # status reports; it does not fail the build
     return _emit(args, "status", print_ok, data, "\n".join(lines))
 
@@ -150,6 +159,19 @@ def _set_status(path: Path, status: str) -> None:
     else:
         head = head + f"\nstatus: {status}"
     path.write_bytes((head + rest).replace("\n", nl).encode("utf-8"))
+
+
+def _hash2_when_approved(root: Path, rid: str, rel: str) -> str | None:
+    """hash2 of `rid` as its file stood in the commit that added its latest approval line (None if unknown)."""
+    try:
+        added = [a for a in gitlog.added_lines(root, approvals.APPROVALS_PATH, None) if f'"id": "{rid}"' in a.text]
+    except gitlog.GitError:
+        return None
+    if not added:
+        return None
+    text = gitlog.show(root, added[-1].sha, rel)
+    req = store.requirements_in(text, rel).get(rid) if text else None
+    return req.hash2 if req else None
 
 
 def cmd_approve(args) -> int:
@@ -218,8 +240,11 @@ def cmd_approve(args) -> int:
         if same and prev.hash2 is not None and not changed_like and approvals.risk_matches(prev, repo, r.id):
             continue  # already approved as-is
         if same and prev.hash2 is None and not changed_like and approvals.risk_matches(prev, repo, r.id):
-            entries.append(Approval(r.id, r.hash, args.approver, args.role, prev.change_request, when, risk, r.hash2))
-            continue  # D007: refresh a legacy lock; the text the human approved is unchanged
+            if _hash2_when_approved(root, r.id, r.file) == r.hash2:
+                entries.append(Approval(r.id, r.hash, args.approver, args.role, prev.change_request, when, risk, r.hash2))
+                continue  # D007: refresh a legacy lock; the links and criteria the human approved are unchanged
+            blocked.append(r.id)  # D009: links or acceptance criteria changed since that approval
+            continue
         if prev and (not same or changed_like) and not args.cr:
             blocked.append(r.id)
             continue
@@ -299,6 +324,10 @@ def cmd_init(args) -> int:
         cfg = root / ".sparkwright" / "config.yaml"
         if head.returncode == 0 and "baseline: null" in cfg.read_text(encoding="utf-8"):
             cfg.write_text(cfg.read_text(encoding="utf-8").replace("baseline: null", f"baseline: {head.stdout.strip()}"), encoding="utf-8")
+        signing = subprocess.run(["git", "-C", str(root), "config", "--get", "commit.gpgsign"], capture_output=True, text=True)
+        text = cfg.read_text(encoding="utf-8")
+        if head.returncode == 0 and signing.stdout.strip().lower() == "true" and "signing_from: null" in text:
+            cfg.write_text(text.replace("signing_from: null", f"signing_from: {head.stdout.strip()}"), encoding="utf-8")
         name, email = gitlog.user_identity(root)
         text = cfg.read_text(encoding="utf-8")
         if email and "approvers: []" in text:
@@ -429,7 +458,8 @@ def cmd_interview(args) -> int:
         if args.mode == "ingest" and args.prepare:
             if not args.file:
                 raise iv.InterviewError("give the transcript file")
-            data = iv.prepare_ingest(root, args.file, args.consent or "", names, args.simulated)
+            data = iv.prepare_ingest(root, args.file, args.consent or "", names, args.simulated,
+                                     keep_names=getattr(args, "keep_names", False))
             return _emit(args, "interview", True, data,
                          f"Run a fresh Theme Synthesizer agent on {data['prompt']}, save its reply to "
                          f"{data['result_file']}, then run: {data['then']}")
@@ -444,7 +474,8 @@ def cmd_interview(args) -> int:
             else:
                 if not args.file:
                     raise iv.InterviewError("give the transcript file")
-                res = iv.ingest(root, router, args.file, args.consent or "", names=names, simulated=args.simulated)
+                res = iv.ingest(root, router, args.file, args.consent or "", names=names, simulated=args.simulated,
+                                keep_names=getattr(args, "keep_names", False))
     except (iv.InterviewError, ProviderError, RoleFailed, OSError) as exc:
         return _emit(args, "interview", False, {"error": str(exc)}, f"Stopped: {exc}")
     msg = f"Evidence written to {res.path.relative_to(root)}."
@@ -538,7 +569,7 @@ def cmd_mutate(args) -> int:
     budget = float(args.budget or cfg.get("mutation", {}).get("time_budget_s", 300))
     minimum = float(cfg.get("mutation", {}).get("min", 0.8))
     from .runner.verify import command_env
-    rep = mutate.run(root, args.base, test_cmd, budget, test_globs=cfg.get("test_globs"), env=command_env(cfg.get("env"), root))
+    rep = mutate.run(root, args.base, test_cmd, budget, test_globs=cfg.get("test_globs"), env=command_env(cfg.get("env"), root, (cfg.get("sandbox") or {}).get("keep_env"), cfg.get("sandbox") or {}))
     ok = rep.baseline_ok and rep.score >= minimum
     lines = [rep.message]
     for m in rep.survivors[:30]:
@@ -674,7 +705,7 @@ def cmd_verify(args) -> int:
     if not cfg.get("checks"):
         return _emit(args, "verify", False, {"error": "no checks configured"}, "Add commands under `checks:` in .sparkwright/config.yaml.")
     from .runner.verify import command_env
-    results = run_checks(root, cfg["checks"], env=command_env(cfg.get("env"), root, (cfg.get("sandbox") or {}).get("keep_env")))
+    results = run_checks(root, cfg["checks"], env=command_env(cfg.get("env"), root, (cfg.get("sandbox") or {}).get("keep_env"), cfg.get("sandbox") or {}))
     ok = all(r.ok for r in results)
     lines = [f"{'PASS' if r.ok else 'FAIL'}  {r.name}: {r.command}" + ("" if r.ok else "\n" + r.output[-1500:]) for r in results]
     return _emit(args, "verify", ok, {"results": [{"name": r.name, "ok": r.ok} for r in results]}, "\n".join(lines))
@@ -777,6 +808,7 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--prepare", action="store_true", help="ingest: write the Theme Synthesizer prompt for a host agent")
     sp.add_argument("--consent", help="how consent was obtained (required for ingest)")
     sp.add_argument("--redact", help="comma-separated names to remove")
+    sp.add_argument("--keep-names", action="store_true", help="confirm that names left in the transcript may be stored")
     sp.add_argument("--simulated", action="store_true", help="mark evidence as simulated (never counts as evidence)")
     sp.add_argument("--dry-run", action="store_true", help=argparse.SUPPRESS)
     sp.set_defaults(func=cmd_interview)

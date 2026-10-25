@@ -12,5 +12,6 @@ gates:            # only component and task may be set: auto | human
 checks: {}
 trailers: required   # required | warn | off
 approvers: []        # people allowed to approve: [{name, email}] matching their git author email
-require_signed: false
+require_signed: high-risk   # false | high-risk | true (signed approvals; D007)
+signing_from: null   # set by init when git commit signing is on; enforcement starts after this commit
 baseline: null       # set by init/adopt to the commit before SparkWright was introduced

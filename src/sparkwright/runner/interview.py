@@ -23,6 +23,27 @@ class InterviewError(RuntimeError):
     pass
 
 
+NAME_RE = re.compile(r"(?<![.!?:]\s)(?<!^)\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)\b", re.M)
+
+
+def unredacted_names(text: str) -> list[str]:
+    """D009 (S7.4): runs of two or more capitalised words that look like a person's full name and are still in
+    the text after redaction. A heuristic: a human confirms with --redact or --keep-names."""
+    found = []
+    for m in NAME_RE.finditer(text):
+        words = m.group(1).split()
+        if len(words) <= 4 and m.group(1) not in found:
+            found.append(m.group(1))
+    return found[:20]
+
+
+def _guard_names(text: str, keep_names: bool) -> None:
+    left = [] if keep_names else unredacted_names(text)
+    if left:
+        raise InterviewError(f"the transcript still contains what look like personal names: {left}. Remove them with "
+                             f"--redact \"Name One,Name Two\", or confirm they may be stored with --keep-names")
+
+
 def redact(text: str, names: list[str] | None = None) -> str:
     """Strip emails, phone numbers and given names (S7.4)."""
     text = EMAIL_RE.sub("[email]", text)
@@ -161,14 +182,16 @@ def owner_interview(root: Path | str, router: Router, ask: Callable[[str], str] 
 
 
 def ingest(root: Path | str, router: Router, transcript_path: Path | str, consent: str,
-           names: list[str] | None = None, simulated: bool = False) -> InterviewResult:
+           names: list[str] | None = None, simulated: bool = False, keep_names: bool = False) -> InterviewResult:
     root = Path(root).resolve()
     if not consent or not consent.strip():
         raise InterviewError("--consent is required: describe how consent was obtained")
     text = Path(transcript_path).read_text(encoding="utf-8")
     log = RunLog(root, "ingest")
     log.append("consent", status="done", consent=consent)
-    synthesis = synthesize(router, root, redact(text, names), log)
+    clean = redact(text, names)
+    _guard_names(clean, keep_names)
+    synthesis = synthesize(router, root, clean, log)
     path = write_evidence(root, "transcript", consent, synthesis, simulated=simulated, slug="transcript")
     sat, _ = saturation(root)
     log.append("write", status="done", evidence=str(path.relative_to(root)))
@@ -199,12 +222,13 @@ def host_owner(root: Path | str, consent: str) -> dict:
 
 
 def prepare_ingest(root: Path | str, transcript_path: Path | str, consent: str, names: list[str] | None = None,
-                   simulated: bool = False) -> dict:
+                   simulated: bool = False, keep_names: bool = False) -> dict:
     """Redact a transcript and write the Theme Synthesizer prompt for a fresh host agent."""
     root = Path(root).resolve()
     if not consent or not consent.strip():
         raise InterviewError("--consent is required: describe how consent was obtained")
     text = Path(transcript_path if Path(transcript_path).is_absolute() else root / transcript_path).read_text(encoding="utf-8")
+    _guard_names(redact(text, names), keep_names)
     log = RunLog(root, "ingest")
     run_dir = log.path.with_suffix("")
     run_dir.mkdir(parents=True, exist_ok=True)
