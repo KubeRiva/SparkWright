@@ -549,6 +549,32 @@ class TestAlreadyImplemented(unittest.TestCase):
             self.assertIn("Already implemented: calc.clamp exists", git(ws(b), "log", "--format=%B", "-n", "20"))
 
 
+class TestRebuildAfterChange(unittest.TestCase):
+    def test_merged_task_rebuilds_after_cr_reapproval(self):
+        with TempRepo() as r:
+            project(r)
+            run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+            run_cli(r, "approve", "C1", "--as", "Srikanth")
+            commit(r, "approve")
+            b = Build(r, "C1.1.1.T1")
+            b.advance()
+            write(ws(b), "tests/test_calc.py", GOOD_TESTS)
+            b.submit("test-author", '{"status": "ok"}')
+            write(ws(b), "calc.py", CODE)
+            b.submit("builder", '{"status": "ok"}')
+            self.assertEqual(b.submit("code-reviewer", "[]")["step"], "ready")
+            git(r, "merge", "-q", "--no-ff", "sparkwright/C1.1.1.T1", "-m", "merge")
+            commit(r, "events")
+            run_cli(r, "change", "new", "C1.1.1.T1", "--reason", "x")
+            run_cli(r, "approve", "CR1", "--as", "Srikanth")
+            run_cli(r, "change", "apply", "CR1")
+            host_review(r, "C1")
+            self.assertEqual(run_cli(r, "approve", "C1.1.1.T1", "--as", "Srikanth", "--cr", "CR1")[0], 0)
+            commit(r, "reapprove")
+            ins = Build(r, "C1.1.1.T1").advance()
+            self.assertEqual(ins["step"], "test-author", ins)
+
+
 class TestPhase5ReviewFixes(unittest.TestCase):
     """Regressions for the independent review of Phase 5 (specs/reviews/2026-10-24-phase5-review.md)."""
 

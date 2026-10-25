@@ -461,10 +461,12 @@ class Build:
         return {"task": self.task, "step": st.phase, "kind": "auto"}
 
     def advance(self) -> dict:
-        if self.state.phase in ("blocked", "changed"):
+        if self.state.phase in ("blocked", "changed", "ready"):
             status = checks.run(self.root, write_ledger=False).nodes[self.task].status
-            if self.restart or (self.state.phase == "changed" and status == "approved"):
+            if (self.restart and self.state.phase != "ready") or (self.state.phase == "changed" and status == "approved"):
                 self._new_run()
+            elif self.state.phase == "ready" and status == "approved":
+                self._new_run()  # S3.9: a change request re-approved this task after its last build; build it again
         for _ in range(60):
             st = self.state
             if st.phase in AGENT_STEPS or st.phase in TERMINAL:
