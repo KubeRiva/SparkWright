@@ -87,7 +87,18 @@ Remaining tasks, in a sensible order:
 | Change a spec | "Open a change request for C1.2.1" | `sparkwright change new C1.2.1 --reason "..."` |
 
 Approvals count only when **you** commit them with the git email listed under
-`approvers:` in `.sparkwright/config.yaml`.
+`approvers:` in `.sparkwright/config.yaml`. The same goes for protected files
+(`AGENTS.md`, `.sparkwright/config.yaml`, `specs/approvals.jsonl`, locked tests)
+and for closing a high-severity review finding.
+
+**Signing risky approvals.** Approvals of `risk: high` work should be in
+signed commits. Until you set it up, `check` only warns. To switch it on:
+`git config commit.gpgsign true` (with a GPG or SSH signing key), then set
+`signing_from: <last commit before signing>` in `.sparkwright/config.yaml`.
+
+**Secret keys.** Tests and AI-written code run without variables that look
+like secrets (`*_API_KEY`, `*TOKEN*`, `AWS_*` …). If a test needs one, list
+it under `sandbox: {keep_env: [NAME]}`.
 
 ## Troubleshooting
 

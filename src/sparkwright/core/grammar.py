@@ -32,6 +32,15 @@ class Requirement:
     file: str
     line: int
     extras: dict = field(default_factory=dict)
+    criteria: str = ""  # task files: the `## Acceptance criteria` section (D007)
+
+    @property
+    def hash2(self) -> str:
+        """D007 lock: text, sorted parent refs, task extras and acceptance criteria. Recorded next to `hash`."""
+        import json
+        crit = "\n".join(" ".join(ln.split()) for ln in self.criteria.splitlines() if ln.strip())
+        return text_hash(self.text + "\nrefs:" + ",".join(sorted(self.refs)) + "\nextras:"
+                         + json.dumps(self.extras, sort_keys=True, default=str) + "\ncriteria:" + crit)
 
     @property
     def hash(self) -> str:

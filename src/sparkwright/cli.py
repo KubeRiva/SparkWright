@@ -213,9 +213,13 @@ def cmd_approve(args) -> int:
         prev = latest.get(r.id)
         risk = approvals.risk_of(repo, r.id)
         changed_like = derived.get(r.id) in ("changed", "in-review")
-        if prev and prev.hash == r.hash and not changed_like and approvals.risk_matches(prev, repo, r.id):
+        same = prev is not None and approvals.matches(prev, r)
+        if same and prev.hash2 is not None and not changed_like and approvals.risk_matches(prev, repo, r.id):
             continue  # already approved as-is
-        if prev and (prev.hash != r.hash or changed_like) and not args.cr:
+        if same and prev.hash2 is None and not changed_like and approvals.risk_matches(prev, repo, r.id):
+            entries.append(Approval(r.id, r.hash, args.approver, args.role, prev.change_request, when, risk, r.hash2))
+            continue  # D007: refresh a legacy lock; the text the human approved is unchanged
+        if prev and (not same or changed_like) and not args.cr:
             blocked.append(r.id)
             continue
         if args.cr and prev:  # S3.10: a change request re-approves its target only after a review, then its descendants
@@ -234,7 +238,7 @@ def cmd_approve(args) -> int:
                 if derived.get(cr_target) != "approved" or (t_applied and (not t_appr or t_appr.time < t_applied)):
                     refused.append(f"{r.id}: re-approve the change request's target {cr_target} first (S3.10)")
                     continue
-        entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk))
+        entries.append(Approval(r.id, r.hash, args.approver, args.role, args.cr, when, risk, r.hash2))
     if refused:
         return _emit(args, "approve", False, {"refused": refused}, "Refusing: " + "; ".join(refused))
     if unreviewed:
@@ -657,7 +661,7 @@ def cmd_verify(args) -> int:
     if not cfg.get("checks"):
         return _emit(args, "verify", False, {"error": "no checks configured"}, "Add commands under `checks:` in .sparkwright/config.yaml.")
     from .runner.verify import command_env
-    results = run_checks(root, cfg["checks"], env=command_env(cfg.get("env"), root))
+    results = run_checks(root, cfg["checks"], env=command_env(cfg.get("env"), root, (cfg.get("sandbox") or {}).get("keep_env")))
     ok = all(r.ok for r in results)
     lines = [f"{'PASS' if r.ok else 'FAIL'}  {r.name}: {r.command}" + ("" if r.ok else "\n" + r.output[-1500:]) for r in results]
     return _emit(args, "verify", ok, {"results": [{"name": r.name, "ok": r.ok} for r in results]}, "\n".join(lines))

@@ -1,6 +1,8 @@
 """Load every spec file in a repository (SYSTEM S1)."""
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -94,6 +96,11 @@ def load(root: Path | str) -> Repo:
         reqs, issues = parse_body(body, rel, first)
         if meta.get("type") in ("change", "review"):
             reqs = []  # quoted requirement lines in change requests and reviews are not definitions
+        if meta.get("type") == "task":
+            m = re.search(r"^#{2,3}[ \t]+acceptance criteria[ \t]*\n(.*?)(?=^#{1,3}[ \t]|\Z)", body, re.M | re.S | re.I)
+            for r in reqs:
+                if r.kind == "task":
+                    r.criteria = m.group(1).strip() if m else ""
         sf.requirements, sf.issues = reqs, sf.issues + issues
         files.append(sf)
         if meta.get("type") == "evidence" and sf.id and ids.kind_of(sf.id) == "evidence":

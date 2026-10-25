@@ -62,6 +62,19 @@ class Router:
         price = spec.get("price_per_mtok") or {}
         return (usage.input_tokens * float(price.get("input", 0)) + usage.output_tokens * float(price.get("output", 0))) / 1e6
 
+    def max_calls(self) -> int:
+        return int(self.config.get("budgets", {}).get("max_calls_per_run", 40) or 40)
+
+    def _priced(self, tier: str) -> bool:
+        if tier in self.overrides:
+            return True  # tests and dry runs
+        spec = self.config.get("models", {}).get(tier) or {}
+        price = spec.get("price_per_mtok") or {}
+        try:  # a zero price would disable both the dollar ceiling and the call cap
+            return float(price.get("input", 0)) > 0 or float(price.get("output", 0)) > 0
+        except (TypeError, ValueError, AttributeError):
+            return False
+
     def ceiling(self) -> float:
         return float(self.config.get("budgets", {}).get("per_run_usd", 0) or 0)
 
@@ -81,6 +94,10 @@ class Router:
             estimate = self.spent_usd / self.calls if self.calls else 0.0
             if ceiling and not force and (self.spent_usd >= ceiling or self.spent_usd + estimate > ceiling):
                 raise BudgetExceeded(f"run cost ceiling ${ceiling:.2f} would be exceeded")
+            if not force and not self._priced(attempt_tier) and self.calls >= self.max_calls():
+                # D007: without prices the dollar ceiling cannot work, so the run is capped by number of calls
+                raise BudgetExceeded(f"no price configured for tier '{attempt_tier}'; stopped at the "
+                                     f"{self.max_calls()}-call limit (budgets.max_calls_per_run)")
             try:
                 provider, model, spec = self._provider(attempt_tier)
             except providers.ProviderError as exc:

@@ -161,7 +161,7 @@ class Build:
         self.test_cmd = (self.cfg.get("checks") or {}).get("test")
         if not self.test_cmd:
             raise BuildError("set checks.test in .sparkwright/config.yaml so builds can run tests")
-        self.env = command_env(self.cfg.get("env"), self.root)
+        self.env = command_env(self.cfg.get("env"), self.root, (self.cfg.get("sandbox") or {}).get("keep_env"))
         self.prove = bool(self.req.extras.get("prove"))
         if self.prove and not self.cfg.get("prove"):
             raise BuildError(f"task {self.task} sets prove: true; set `prove:` in .sparkwright/config.yaml to the "

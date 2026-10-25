@@ -12,7 +12,7 @@ CONFIGURABLE_GATES = {"component", "task"}
 DEFAULTS: dict = {
     "models": {},
     "roles": {},
-    "budgets": {"per_run_usd": 10.0, "per_level_usd": {}},
+    "budgets": {"per_run_usd": 10.0, "per_level_usd": {}, "max_calls_per_run": 40},
     "gates": {"component": "auto", "task": "auto"},
     "checks": {},
     "prove": None,             # S5.6: command run for `prove: true` tasks; {files} = the task's changed source files
@@ -22,8 +22,11 @@ DEFAULTS: dict = {
     "calibration": {"min_catch_rate": 0.5},   # S10.3
     "security_review": {"min_changed_lines": 20},  # D006: high-risk builds with smaller source diffs skip it
     "review": {"disabled": []},               # personas a human removed from default reviews after calibration
-    "approvers": [],           # [{name, email}] allowed to approve (S6.3, D002)
-    "require_signed": False,
+    "approvers": [],           # [{name, email, signing_key?}] allowed to approve (S6.3, D002, D007)
+    "require_signed": "high-risk",   # D007: false | "high-risk" | true; enforced for commits after `signing_from`
+    "signing_from": None,          # commit after which signing is enforced (set it once signing is configured)
+    "sandbox": {"keep_env": []},
+    "log_waivers": [],             # D007: commits an approver excused from the append-only rule (config is protected)   # D007: secrets are removed from AI-written code's environment; keep_env re-allows names
     "baseline": None,          # commit hash; trailer/drift checks apply after it
     "trailers": "required",    # required | warn | off
     "test_globs": ["tests/**/*", "test/**/*", "**/*_test.*", "**/*.test.*", "**/test_*.py"],

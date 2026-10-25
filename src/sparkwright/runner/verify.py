@@ -7,6 +7,7 @@ UV_PROJECT_ENVIRONMENT) instead of creating one per copy.
 from __future__ import annotations
 
 import os
+import re
 import shlex
 import subprocess
 from dataclasses import dataclass
@@ -29,9 +30,25 @@ def split_cmd(cmd: str) -> list[str]:
     return [p[1:-1] if len(p) >= 2 and p[0] == p[-1] and p[0] in "\"'" else p for p in parts]
 
 
-def command_env(env: dict | None, repo: Path | str | None = None) -> dict:
-    """os.environ plus config `env:` values; `{repo}` in a value is replaced by the main repository root."""
-    out = dict(os.environ)
+SECRET_RE = re.compile(
+    r"(^|_)(API_?KEY|ACCESS_?KEY|TOKEN|SECRET|PASSWORD|PASSWD|PASSPHRASE|CREDENTIALS?|PRIVATE_?KEY|AUTH|PAT|DSN|WEBHOOK)($|_)"
+    r"|^(DATABASE_URL|KUBECONFIG|SSH_AUTH_SOCK|GPG_AGENT_INFO|NETRC)$"
+    r"|^(ANTHROPIC|OPENAI|AWS|AZURE|GOOGLE_APPLICATION|GCP|GH|GITHUB|STRIPE)_", re.I)
+
+
+def scrub(env: dict, keep: list[str] | None = None) -> dict:
+    """D007: remove secrets from the environment of AI-written code (tests, mutants, library imports).
+
+    SSH_AUTH_SOCK and GPG_AGENT_INFO are removed too, so AI-written code cannot sign commits as the user.
+    `keep` names are matched without regard to case.
+    """
+    keep_set = {k.upper() for k in (keep or [])}
+    return {k: v for k, v in env.items() if k.upper() in keep_set or not SECRET_RE.search(k)}
+
+
+def command_env(env: dict | None, repo: Path | str | None = None, keep: list[str] | None = None) -> dict:
+    """os.environ without secrets, plus config `env:` values; `{repo}` in a value is the main repository root."""
+    out = scrub(dict(os.environ), keep)
     for k, v in (env or {}).items():
         out[str(k)] = str(v).replace("{repo}", str(Path(repo).resolve()) if repo else "")
     out.setdefault("PYTHONIOENCODING", "utf-8")

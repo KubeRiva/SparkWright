@@ -20,6 +20,7 @@ class Approval:
     change_request: str | None
     time: str
     risk: str | None = None  # risk tier of the owning file when approved (S6.2)
+    hash2: str | None = None  # D007: also locks parent refs and acceptance criteria
 
 
 def read(root: Path | str) -> tuple[list[Approval], list[str]]:
@@ -36,7 +37,7 @@ def read(root: Path | str) -> tuple[list[Approval], list[str]]:
             aid = d["id"] if str(d["id"]).startswith("test:") else ids.canonical(str(d["id"]))
             cr = ids.canonical(d["change_request"]) if d.get("change_request") else None
             out.append(Approval(aid, d["hash"], d["approver"], d["role"], cr, d["time"],
-                                str(d["risk"]) if d.get("risk") else None))
+                                str(d["risk"]) if d.get("risk") else None, d.get("hash2")))
         except (json.JSONDecodeError, KeyError, TypeError) as exc:
             errors.append(f"{APPROVALS_PATH}:{n}: invalid entry ({exc})")
     return out, errors
@@ -55,8 +56,9 @@ def append(root: Path | str, entries: list[Approval]) -> None:
     with path.open("a", encoding="utf-8") as fh:
         for e in entries:
             d = asdict(e)
-            if d.get("risk") is None:
-                d.pop("risk", None)
+            for k in ("risk", "hash2"):
+                if d.get(k) is None:
+                    d.pop(k, None)
             fh.write(json.dumps(d, sort_keys=True) + "\n")
 
 
@@ -74,3 +76,10 @@ def risk_of(repo, rid: str) -> str | None:
 def risk_matches(appr: Approval, repo, rid: str) -> bool:
     """An approval recorded under another risk tier no longer counts (S6.2: risk changes need a human)."""
     return appr.risk is None or appr.risk.strip().lower() == risk_of(repo, rid)
+
+
+def matches(appr: Approval, req) -> bool:
+    """The approval still holds for this requirement's current content (D007: hash2 when recorded)."""
+    if appr.hash != req.hash:
+        return False
+    return appr.hash2 is None or appr.hash2 == req.hash2

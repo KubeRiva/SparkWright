@@ -19,3 +19,8 @@ First public release.
 - Reviewer calibration with a planted-flaw suite.
 - Hosts: Claude Code plugin, Codex and Gemini CLI adapters, AGENTS.md; Runner
   mode for any OpenAI-compatible or Anthropic model.
+- Trust hardening (D007): only approvers may change protected files or close
+  high review findings; signed approvals for high-risk work
+  (`require_signed`, `signing_from`); secret keys hidden from AI-written code
+  (`sandbox.keep_env`); approval locks cover parent links and acceptance
+  criteria; per-commit append-only logs; a call cap for unpriced models.

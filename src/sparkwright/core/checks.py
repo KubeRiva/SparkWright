@@ -1,6 +1,8 @@
 """Offline checks behind `sparkwright check` (SYSTEM S1.4, S2.3, S2.4, S2.6, S6.5, S6.8)."""
 from __future__ import annotations
 
+import re
+
 import fnmatch
 import hashlib
 from dataclasses import asdict, dataclass, field
@@ -111,7 +113,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
         e.id = rn(e.id)
     derived = status_mod.derive(repo, latest, evs)
     for rid, appr in latest.items():
-        if rid in repo.requirements and appr.hash == repo.requirements[rid].hash \
+        if rid in repo.requirements and approvals_mod.matches(appr, repo.requirements[rid]) \
                 and not approvals_mod.risk_matches(appr, repo, rid):
             add("warning", "approval.risk-changed",
                 f"{rid} was approved at risk '{appr.risk}' but its file now says "
@@ -120,6 +122,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     for k, v in annotations.scan(root, cfg["test_globs"]).items():
         tests.setdefault(rn(k), []).extend(v)
     commits: list[gitlog.Commit] = []
+    gitlog.clear_cache()
     if not gitlog.git_available():
         add("warning", "git.unavailable", "git is not installed; commit, drift and role checks were skipped")
     elif not gitlog.is_repo(root):
@@ -182,18 +185,26 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             add("error", "task.no-test", f"task {rid} is {derived[rid]} but no test references it", id=rid, file=r.file, line=r.line)
 
     # --- approvals and locks (S2.4) ---
+    legacy: list[str] = []
     for rid, r in repo.requirements.items():
         status = repo.status_of(rid)
         appr = latest.get(rid)
         if appr is None:
             if status in APPROVED_LIKE:
                 add("error", "approval.unconfirmed", f"{rid} is marked {status} but has no approval record", id=rid, file=r.file, line=r.line)
-        elif appr.hash != r.hash:
+        elif not approvals_mod.matches(appr, r):
             if derived.get(rid) in ("in-review", "changed"):  # S3.10: an applied change request is being worked through
                 add("warning", "approval.change-in-progress", f"{rid} is being changed under an applied change request; "
                     f"review it and re-approve with --cr", id=rid, file=r.file, line=r.line)
             else:
-                add("error", "approval.hash-mismatch", f"{rid} changed after approval by {appr.approver}; needs a change request", id=rid, file=r.file, line=r.line)
+                what = "its text" if appr.hash != r.hash else "its parent links or acceptance criteria"
+                add("error", "approval.hash-mismatch", f"{rid}: {what} changed after approval by {appr.approver}; needs a change request", id=rid, file=r.file, line=r.line)
+        elif appr.hash2 is None:
+            legacy.append(rid)
+    if legacy:
+        add("info", "approval.legacy-lock", f"{len(legacy)} approval(s) predate locking of parent links and acceptance criteria "
+            f"(D007): {', '.join(legacy[:6])}{', ...' if len(legacy) > 6 else ''}. `sparkwright approve <ids>` refreshes "
+            f"them without a change request")
     for eid, ev in repo.evidence.items():
         if ev.status in APPROVED_LIKE | {"confirmed"} and eid not in latest:
             add("error", "approval.unconfirmed", f"evidence {eid} is marked {ev.status} but has no approval record", id=eid, file=ev.file)
@@ -223,6 +234,13 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     task_ids = {rid for rid, r in repo.requirements.items() if r.kind == "task"}
     tracked_globs = [g for rid in task_ids if derived[rid] in APPROVED_LIKE for g in nodes[rid].files]
     lock_idx = _lock_positions(root, cfg, commits, entries)
+    approver_emails = {str(a["email"]).lower() for a in cfg.get("approvers") or [] if isinstance(a, dict) and a.get("email")}
+    sign_mode = signing_mode(cfg)
+    signed_after = gitlog.shas_after(root, cfg["signing_from"]) if commits and cfg.get("signing_from") else None
+    if commits and cfg.get("signing_from") and signed_after is None:
+        add("error", "config.signing-from", f"signing_from {cfg['signing_from']} is not a commit in this repository "
+            f"(typo or shallow clone?); signing cannot be checked")
+        signed_after = set(c.sha for c in commits)  # fail safe: treat every commit as one that must be signed
     commit_pos = {c.sha: i for i, c in enumerate(commits)}
     for c in commits:
         short = c.sha[:12]
@@ -243,6 +261,21 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                 if not _glob_match(path, tracked_globs):
                     add("error" if mode == "required" else "warning", "drift.untracked-file",
                         f"commit {short} changes {path}, which no approved task declares", file=path)
+        if approver_emails and c.role in (None, "", "human"):  # D007: humans other than approvers may not touch protected files
+            prot = [f for f in c.files if _glob_match(f.lower(), [g.lower() for g in cfg.get("always_protected", [])])
+                    or (f in lock_idx and lock_idx[f] < commit_pos[c.sha])]
+            if prot and c.author_email not in approver_emails:
+                add("error", "protected.non-approver", f"commit {short} by {c.author_email} changes protected "
+                    f"{', '.join(prot)}; only an approver may change these", file=prot[0])
+            elif prot and sign_mode != "off" and signed_after is not None and c.sha in signed_after \
+                    and not _signed_by_approver(root, cfg, c.sha, c.author_email):
+                add("error" if sign_mode == "all" else "warning", "protected.unsigned",
+                    f"commit {short} changes protected {', '.join(prot)} without a signature", file=prot[0])
+        if c.role == "runner":  # D007: the runner adds new review files; it never edits or deletes one
+            for path, kind in c.status.items():
+                if _glob_match(path, ["specs/reviews/*"]) and kind != "A":
+                    add("error", "role.review-edit", f"commit {short} by role 'runner' "
+                        f"{'deletes' if kind == 'D' else 'edits'} existing review {path}; the runner may only add reviews", file=path)
         if c.role and c.role != "human":
             for path in c.files:
                 if path not in c.body:
@@ -258,9 +291,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                     add("error", "role.path-violation", f"commit {short} by role '{c.role}' changes protected path {path}", file=path)
 
     if gitlog.is_repo(root) and not any(f.code == "git.log-failed" for f in findings):
-        _verify_approvals(root, cfg, add, {c.sha: c.role for c in commits})
-        for rel in (approvals_mod.APPROVALS_PATH, events_mod.EVENTS_PATH):
-            _append_only(root, cfg.get("baseline"), rel, add)
+        _verify_approvals(root, cfg, add, {c.sha: c.role for c in commits}, signed_after,
+                          lambda i: _current_risk(repo, rn(ids.canonical(i)) if not i.startswith("test:") else i))
+        _append_only(root, cfg.get("baseline"), [approvals_mod.APPROVALS_PATH, events_mod.EVENTS_PATH], add,
+                     cfg.get("log_waivers"))
+        _review_decisions(root, cfg, add, {c.sha: c.role for c in commits}, approver_emails)
 
     findings.sort(key=lambda f: ({"error": 0, "warning": 1, "info": 2}[f.severity], f.file or "", f.line or 0, f.code))
     if write_ledger:
@@ -314,7 +349,24 @@ def _lock_positions(root: Path, cfg: dict, commits: list, entries: list) -> dict
     return out
 
 
-def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None) -> None:
+def signing_mode(cfg: dict) -> str:
+    """D007: "off", "high-risk" (default) or "all"."""
+    v = cfg.get("require_signed")
+    if v in (None, False, "off", "false", "no"):
+        return "off"
+    if v in (True, "all", "true", "yes", "always"):
+        return "all"
+    return "high-risk"
+
+
+def _current_risk(repo, aid: str) -> str | None:
+    sf = repo.file_of.get(aid) or next((f for f in repo.files if f.id == aid), None)
+    r = sf.meta.get("risk") if sf is not None else None
+    return str(r).strip().lower() if r else None
+
+
+def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None, signed_after: set | None = None,
+                      risk_now=None) -> None:
     """S6.3: committed human approval lines must come from allowlisted authors."""
     import json
     approvers = {}
@@ -327,6 +379,7 @@ def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None) -> 
         add("error", "git.log-failed", str(exc))
         return
     committed = set()
+    unsigned_unenforced: list[str] = []
     for line in added:
         committed.add(line.text)
         try:
@@ -350,8 +403,26 @@ def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None) -> 
         elif who not in names:
             add("error", "approval.unverified-approver",
                 f"approval of {d.get('id')} names '{d.get('approver')}' but was committed by {line.author_email}", id=d.get("id"))
-        elif cfg.get("require_signed") and not gitlog.verify_commit(root, line.sha):
-            add("error", "approval.unsigned", f"approval of {d.get('id')} is in unsigned commit {line.sha[:12]}", id=d.get("id"))
+        else:
+            mode = signing_mode(cfg)
+            try:
+                current = risk_now(str(d.get("id", ""))) if risk_now else None
+            except Exception:  # noqa: BLE001 - an unknown id is reported elsewhere
+                current = None
+            high = "high" in (str(d.get("risk") or "").lower(), current or "")
+            needs = mode == "all" or (mode == "high-risk" and high)
+            if needs and cfg.get("signing_from") and signed_after is not None and line.sha not in signed_after:
+                needs = False  # committed before signing was switched on
+            if needs and not _signed_by_approver(root, cfg, line.sha, line.author_email):
+                if cfg.get("signing_from"):
+                    add("error", "approval.unsigned", f"approval of {d.get('id')} is in unsigned commit {line.sha[:12]}", id=d.get("id"))
+                else:
+                    unsigned_unenforced.append(str(d.get("id")))
+    if unsigned_unenforced:
+        add("warning", "approval.unsigned-unenforced",
+            f"{len(unsigned_unenforced)} high-risk approval(s) are in unsigned commits ({', '.join(sorted(set(unsigned_unenforced))[:5])}"
+            f"{', ...' if len(set(unsigned_unenforced)) > 5 else ''}). Set up commit signing (git config commit.gpgsign true), "
+            f"then set `signing_from` in .sparkwright/config.yaml to the last commit before signing started (D007)")
     head = gitlog.show(root, "HEAD", approvals_mod.APPROVALS_PATH) or ""
     path = root / approvals_mod.APPROVALS_PATH
     if path.is_file():
@@ -361,12 +432,105 @@ def _verify_approvals(root: Path, cfg: dict, add, roles: dict | None = None) -> 
                 add("warning", "approval.pending", f"uncommitted approval line will be verified once committed: {text[:80]}")
 
 
-def _append_only(root: Path, baseline: str | None, rel: str, add) -> None:
-    """S6.9: content at the baseline and at HEAD must be a prefix of the current file."""
-    path = root / rel
-    current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    for rev in [r for r in (baseline, "HEAD") if r]:
-        old = gitlog.show(root, rev, rel)
-        if old and not current.startswith(old):
-            add("error", "log.not-append-only", f"{rel} was edited or truncated since {rev[:12]}; it is append-only", file=rel)
-            return
+def _append_only(root: Path, baseline: str | None, rels: list[str], add, waivers: list | None = None) -> None:
+    """S6.9 / D007: no commit after the baseline (merges included) may drop or change a line of the logs, and the
+    working copy must keep every committed line. Lines are compared as a multiset, so union merges and a
+    missing final newline are fine. `log_waivers` (protected config) lists commits an approver excused."""
+    from collections import Counter
+    waived = {str(w).lower() for w in waivers or []}
+
+    def lines(text: str | None) -> Counter:
+        return Counter(x for x in (text or "").splitlines() if x.strip())
+
+    try:
+        touching = gitlog.commits_touching(root, baseline, rels)
+    except gitlog.GitError:
+        touching = []
+    specs = {f"{rev}:{rel}" for sha, parents, *_ in touching for rev in [sha, *parents] for rel in rels}
+    specs |= {f"HEAD:{rel}" for rel in rels}
+    blobs = gitlog.read_blobs(root, sorted(specs))
+    for rel in rels:
+        bad = None
+        for sha, parents, _, _, files in touching:
+            if rel not in files or any(sha.lower().startswith(w) for w in waived if len(w) >= 7):
+                continue
+            now = lines(blobs.get(f"{sha}:{rel}"))
+            if any(lines(blobs.get(f"{par}:{rel}")) - now for par in parents):
+                bad = sha
+                break
+        if bad:
+            add("error", "log.not-append-only", f"commit {bad[:12]} removed or edited a line of {rel}; it is "
+                f"append-only (append a correcting entry instead; an approver can list the commit under "
+                f"`log_waivers`)", file=rel)
+            continue
+        path = root / rel
+        current = lines(path.read_text(encoding="utf-8") if path.is_file() else "")
+        if lines(blobs.get(f"HEAD:{rel}")) - current:
+            add("error", "log.not-append-only", f"{rel} was edited or truncated since HEAD; it is append-only", file=rel)
+
+
+def _review_table(text: str | None) -> dict[str, tuple[str, str]]:
+    """{finding id: (severity, decision)} from a review file's findings table."""
+    out: dict[str, tuple[str, str]] = {}
+    for line in (text or "").splitlines():
+        cells = [c.strip().strip("*`").strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) >= 7 and re.fullmatch(r"F\d+", cells[0]):
+            out[cells[0]] = (cells[1].lower(), cells[-1].lower())
+    return out
+
+
+def _review_decisions(root: Path, cfg: dict, add, roles: dict, approver_emails: set) -> None:
+    """D007 (S6.11): only an approver, in a human commit, may take a high finding off `open`.
+
+    For each commit touching specs/reviews, compares the findings in the files it changed before and after, so
+    renamed IDs, rows that no longer parse, deleted or renamed files and rows removed now and re-added later all
+    count as closing. For a merge, a finding counts as closed there only if it was open in every parent (an edit
+    made while resolving the merge). A new high finding added already closed counts as closing too.
+    """
+    try:
+        touching = gitlog.commits_touching(root, cfg.get("baseline"), "specs/reviews")
+    except gitlog.GitError:
+        return
+    wanted = []
+    for sha, parents, _, _, files in touching:
+        for f in files:
+            wanted += [f"{rev}:{f}" for rev in [sha, *parents]]
+    blobs = gitlog.read_blobs(root, sorted(set(wanted)))
+
+    def state(rev: str, files: list[str]) -> dict:
+        out = {}
+        for f in files:
+            for fid, row in _review_table(blobs.get(f"{rev}:{f}")).items():
+                out[(f, fid)] = row
+        return out
+
+    for sha, parents, email, body, files in touching:
+        after = state(sha, files)
+        befores = [state(p, files) for p in parents] or [{}]
+        closed = []
+        for key in set().union(*befores) | set(after):
+            now = after.get(key)
+            if all(b.get(key) == ("high", "open") for b in befores) and now != ("high", "open"):
+                closed.append(key)
+            elif not any(key in b for b in befores) and now and now[0] == "high" and now[1] != "open":
+                closed.append(key)
+        if not closed:
+            continue
+        role = gitlog.role_of(body)
+        ok = role in (None, "", "human") and (not approver_emails or email in approver_emails)
+        if ok and approver_emails and cfg.get("signing_from") and signing_mode(cfg) != "off":
+            ok = _signed_by_approver(root, cfg, sha, email)
+        if not ok:
+            path = sorted(closed)[0][0]
+            add("error", "review.decision-not-allowed", f"commit {sha[:12]} closed or removed high finding "
+                f"{', '.join(f for _, f in sorted(closed))} in {path}; only an approver may decide a high finding", file=path)
+
+
+def _signed_by_approver(root: Path, cfg: dict, sha: str, email: str) -> bool:
+    """A good signature; when the approver lists `signing_key`, by that key (D007)."""
+    status, key = gitlog.signer(root, sha)
+    if status not in ("G", "U"):
+        return False
+    want = [str(a.get("signing_key", "")).replace(" ", "").upper() for a in cfg.get("approvers") or []
+            if isinstance(a, dict) and str(a.get("email", "")).lower() == email and a.get("signing_key")]
+    return not want or any(key.endswith(w) or w.endswith(key) for w in want if key)
