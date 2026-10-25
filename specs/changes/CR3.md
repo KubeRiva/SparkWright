@@ -2,7 +2,7 @@
 id: CR3
 title: Change 3 requirements
 type: change
-status: open
+status: approved
 target: [S5.2, S6.4, S6.5]
 raised_by: human
 rounds: 0
