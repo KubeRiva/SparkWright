@@ -2,16 +2,30 @@ name: ci
 on: [push, pull_request]
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest]
         python: ["3.10", "3.11", "3.12", "3.13"]
+        include:  # every OS on one Python; all Pythons on Linux
+          - { os: windows-latest, python: "3.12" }
+          - { os: macos-latest, python: "3.12" }
+    defaults:
+      run:
+        shell: bash  # Git Bash on Windows, so every step reads the same everywhere
     steps:
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
       - uses: actions/setup-python@v5
         with: { python-version: "${{ matrix.python }}" }
       - run: pip install -e .
+      - name: Git identity for tests that commit
+        run: |
+          git config --global user.email ci@example.com
+          git config --global user.name CI
       - name: Unit tests
         run: cd tests && python -m unittest -v
       - name: SparkWright checks its own specs
