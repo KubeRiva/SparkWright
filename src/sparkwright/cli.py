@@ -177,7 +177,8 @@ def cmd_approve(args) -> int:
         reqs = sf.requirements
         if sf.meta.get("type") in ("evidence", "change"):
             body_hash = checks.evidence_hash(root / sf.path)
-            entries.append(Approval(sf.id, body_hash, args.approver, args.role, args.cr, when))
+            entries.append(Approval(sf.id, body_hash, args.approver, args.role, args.cr, when,
+                                    hash2=checks.evidence_hash2(root / sf.path)))
     elif target in repo.requirements:
         sf, reqs = None, [repo.requirements[target]]
     else:
@@ -185,7 +186,7 @@ def cmd_approve(args) -> int:
 
     if args.cr:
         args.cr = ids.canonical(args.cr)
-    if args.cr and args.cr not in checks.approved_change_requests(repo):
+    if args.cr and args.cr not in checks.approved_change_requests(repo, approvals.latest(approvals.read(root)[0]), root):
         return _emit(args, "approve", False, {"error": f"{args.cr} is not an approved change request"},
                      f"Refusing: {args.cr} is not an approved change request in specs/changes/.")
     derived = {k: n.status for k, n in checks.run(root, write_ledger=False).nodes.items()}

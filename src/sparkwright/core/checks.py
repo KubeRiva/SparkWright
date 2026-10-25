@@ -73,9 +73,35 @@ def evidence_hash(path: Path) -> str:
     return text_hash(body)
 
 
-def approved_change_requests(repo) -> set[str]:
-    return {sf.id for sf in repo.files
-            if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied")}
+SIGNIFICANT_META = ("simulated", "consent", "source", "target", "renames", "risk")
+
+
+def evidence_hash2(path: Path) -> str:
+    """D008: body plus the front-matter fields that change meaning (`simulated`, `consent`, `source`, `target`,
+    `renames`, `risk`); `status` stays out so workflow moves don't break the lock."""
+    import json
+    from .frontmatter import split
+    from .grammar import text_hash
+    meta, body, _ = split(path.read_text(encoding="utf-8-sig"))
+    sig = {k: (meta or {}).get(k) for k in SIGNIFICANT_META if (meta or {}).get(k) is not None}
+    return text_hash(body + "\nmeta:" + json.dumps(sig, sort_keys=True, default=str))
+
+
+def file_approval_holds(root: Path, rel: str, appr) -> bool:
+    if appr is None or appr.hash != evidence_hash(root / rel):
+        return False
+    return appr.hash2 is None or appr.hash2 == evidence_hash2(root / rel)
+
+
+def approved_change_requests(repo, latest: dict | None = None, root: Path | None = None) -> set[str]:
+    """Change requests with status approved/applied AND (when `latest` is given) a human approval that still
+    matches the file (D008: a status line alone never makes a change request count)."""
+    out = set()
+    for sf in repo.files:
+        if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied"):
+            if latest is None or file_approval_holds(Path(root), sf.path, latest.get(sf.id)):
+                out.add(sf.id)
+    return out
 
 
 def run(root: Path | str, write_ledger: bool = True) -> Result:
@@ -103,7 +129,12 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
         add("error", "approval.invalid", e, file=approvals_mod.APPROVALS_PATH)
     latest = approvals_mod.latest(entries)
 
-    renames = rename_map(repo)
+    valid_crs = approved_change_requests(repo, latest, root)
+    for sf in repo.files:
+        if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied") and sf.id not in valid_crs:
+            add("error", "approval.unconfirmed", f"change request {sf.id} is marked {sf.status} but has no matching "
+                f"human approval; it is ignored until a human approves it", id=sf.id, file=sf.path)
+    renames = rename_map(repo, valid_crs)
     rn = lambda i: renames.get(i, i)  # noqa: E731
     latest = {rn(k): v for k, v in latest.items()}
     evs, ev_errors = events_mod.read(root)
@@ -209,10 +240,8 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
         if ev.status in APPROVED_LIKE | {"confirmed"} and eid not in latest:
             add("error", "approval.unconfirmed", f"evidence {eid} is marked {ev.status} but has no approval record", id=eid, file=ev.file)
         elif eid in latest:
-            current = evidence_hash(root / ev.file)
-            if current != latest[eid].hash:
+            if not file_approval_holds(root, ev.file, latest[eid]):
                 add("error", "approval.hash-mismatch", f"evidence {eid} changed after approval by {latest[eid].approver}", id=eid, file=ev.file)
-    valid_crs = approved_change_requests(repo)
     for e in entries:
         if e.change_request and e.change_request not in valid_crs:
             add("error", "approval.unknown-change-request",
@@ -242,8 +271,14 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             f"(typo or shallow clone?); signing cannot be checked")
         signed_after = set(c.sha for c in commits)  # fail safe: treat every commit as one that must be signed
     commit_pos = {c.sha: i for i, c in enumerate(commits)}
+    no_approver_hits: list[str] = []
     for c in commits:
         short = c.sha[:12]
+        if c.role == "conflict":
+            add("error", "commit.conflicting-roles", f"commit {short} '{c.subject}' has SparkWright-Role trailers that disagree")
+        if not approver_emails and c.role in (None, "", "human") and any(
+                _glob_match(f.lower(), [g.lower() for g in cfg.get("always_protected", [])]) for f in c.files):
+            no_approver_hits.append(short)
         spec_only = bool(c.files) and all(_glob_match(f, drift_exclude) for f in c.files)
         if mode != "off":
             if not c.tasks and not spec_only:
@@ -290,6 +325,9 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
                 if _glob_match(path, forbidden) or (path in lock_idx and lock_idx[path] < commit_pos[c.sha]):
                     add("error", "role.path-violation", f"commit {short} by role '{c.role}' changes protected path {path}", file=path)
 
+    if no_approver_hits:
+        add("warning", "protected.no-approvers", f"{len(no_approver_hits)} commit(s) changed protected files, but no "
+            f"`approvers` are configured, so nobody's authorship can be checked; add yourself under `approvers` (S6.5)")
     if gitlog.is_repo(root) and not any(f.code == "git.log-failed" for f in findings):
         _verify_approvals(root, cfg, add, {c.sha: c.role for c in commits}, signed_after,
                           lambda i: _current_risk(repo, rn(ids.canonical(i)) if not i.startswith("test:") else i))
@@ -310,11 +348,12 @@ def cr_targets(meta: dict) -> list[str]:
     return [ids.canonical(str(v)) for v in vals if str(v).strip()]
 
 
-def rename_map(repo) -> dict[str, str]:
-    """OLD -> NEW from approved or applied change requests (S2.9, D004)."""
+def rename_map(repo, valid: set | None = None) -> dict[str, str]:
+    """OLD -> NEW from approved or applied change requests (S2.9, D004); only verified ones when `valid` is given."""
     out: dict[str, str] = {}
     for sf in repo.files:
-        if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied"):
+        if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied") \
+                and (valid is None or sf.id in valid):
             for old, new in (sf.meta.get("renames") or {}).items():
                 out[ids.canonical(str(old))] = ids.canonical(str(new))
     return out

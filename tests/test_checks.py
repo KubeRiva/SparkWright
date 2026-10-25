@@ -97,6 +97,9 @@ class TestApprovals(unittest.TestCase):
             write(r, "specs/changes/CR1.md", "---\nid: CR1\ntitle: faster parsing\ntype: change\nstatus: approved\n"
                   "target: S1.1\n---\n")
             code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
+            self.assertEqual(code, 1, "a change request marked approved without a human approval does not count (D008)")
+            self.assertEqual(run_cli(r, "approve", "CR1", "--as", "Srikanth")[0], 0)
+            code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")
             self.assertEqual(code, 1, "the change request must be applied first")
             self.assertEqual(run_cli(r, "change", "apply", "CR1")[0], 0)
             code, out = run_cli(r, "approve", "SYSTEM", "--as", "Srikanth", "--cr", "CR1")

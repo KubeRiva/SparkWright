@@ -81,11 +81,13 @@ def commits(root: Path | str, baseline: str | None = None) -> list[Commit]:
             continue
         sha, subject, ctime, email, body, files_blob = parts[:6]
         c = Commit(sha, subject, body=body, time=ctime.strip(), author_email=email.strip().lower())
+        roles = set()
         for kind, value in TRAILER_RE.findall(body):
             if kind == "Task":
                 c.tasks.append(ids.canonical(value))
             else:
-                c.role = value.strip().lower()
+                roles.add(value.strip().lower())
+        c.role = (roles.pop() if len(roles) == 1 else "conflict") if roles else None  # D008: disagreeing roles
         for row in files_blob.splitlines():
             kind, _, path = row.strip().partition("\t")
             if path:
@@ -242,8 +244,8 @@ def ls_tree(root: Path | str, rev: str, path: str) -> list[str]:
 
 
 def role_of(body: str) -> str | None:
-    roles = [v.strip().lower() for k, v in TRAILER_RE.findall(body) if k == "Role"]
-    return roles[-1] if roles else None
+    roles = {v.strip().lower() for k, v in TRAILER_RE.findall(body) if k == "Role"}
+    return (roles.pop() if len(roles) == 1 else "conflict") if roles else None
 
 
 def verify_commit(root: Path | str, sha: str) -> bool:

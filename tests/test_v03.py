@@ -107,6 +107,9 @@ class TestRenames(unittest.TestCase):
             write(r, "tests/test_t.py", "# sparkwright: C1.1.1.T1\n")
             write(r, "specs/changes/CR1.md", "---\nid: CR1\ntitle: move\ntype: change\nstatus: approved\nrenames: {C1.1.1.T1: C1.2.1.T1}\n---\n")
             res = checks.run(r)
+            self.assertEqual(res.nodes["C1.2.1.T1"].tests, [], "renames count only once a human approved the CR (D008)")
+            self.assertEqual(run_cli(r, "approve", "CR1", "--as", "Srikanth")[0], 0)
+            res = checks.run(r)
             self.assertEqual(res.nodes["C1.2.1.T1"].tests, ["tests/test_t.py"])
 
 

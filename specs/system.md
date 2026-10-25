@@ -62,7 +62,7 @@ Every requirement is one Markdown bullet:
 Example with two refs and a continuation line:
 
 ```
-- **S2.4** [V8] When a requirement, evidence file, change request or test file is approved, the system shall append an entry to `specs/approvals.jsonl` with `id`, `hash`, `approver`, `role`, `change_request` and `time`, plus `risk` (the owning file's risk tier) and `hash2` for requirements. Ids and hashes: a requirement uses its ID, `hash` covers its text and extras, and `hash2` also covers the sorted parent links and a task file's `## Acceptance criteria` section; an evidence file or change request uses its file id and a hash of the file body; a test file uses `test:<repo-relative path>` and a hash of the file. `role` is `human` for approvals and `runner` only for test locks. When an approved item's current hash (or `hash2`, when recorded) differs from its latest approval, `check` shall fail. An approval without `hash2` still counts; `approve` refreshes it without a change request when the text is unchanged. A changed requirement is re-approved only with an approved change request (`approve --cr CR<n>`).
+- **S2.4** [V8, V1] When a requirement is approved, the system shall append an
   approval entry recording its hash.
 ```
 
@@ -72,10 +72,11 @@ Example with two refs and a continuation line:
   follow the grammar is a grammar error.
 - Requirement hash: SHA-256 (hex) of the UTF-8 text with whitespace runs
   collapsed to one space, followed, for tasks with an extras block, by a newline
-  and the extras as JSON with sorted keys. ID and refs are not hashed (refs are
-  checked by S2.3). Test-file hash: SHA-256 of the file bytes with CRLF converted
-  to LF. Evidence hash: requirement-text normalisation applied to the file body
-  after the front matter.
+  and the extras as JSON with sorted keys. `hash2` (S2.4) adds the sorted refs
+  and, for task files, the acceptance criteria. Test-file hash: SHA-256 of the
+  file bytes with CRLF converted to LF. Evidence and change-request hash:
+  requirement-text normalisation applied to the file body after the front
+  matter; their `hash2` adds the significant front-matter fields (S2.4).
 
 ## Components
 
@@ -108,10 +109,10 @@ Example with two refs and a continuation line:
 
 ### S2 — Ledger & Surveyor
 
-- **S2.1** [V1] The Surveyor shall build the ledger from spec files, `specs/approvals.jsonl`, `specs/events.jsonl`, git commit trailers and test annotations. A test annotation is the text `sparkwright: <ID>` anywhere in a file matching `test_globs`. Trailers are `SparkWright-Task: <ID>` (repeatable) and `SparkWright-Role: <role>`; trailer keys are case-sensitive, role values are compared in lower case, and when a role appears twice the last one counts. Merge commits are skipped for trailer and drift checks but not for the log and review-file checks (S6.9, S6.11). The ledger is generated (`.sparkwright/ledger.json`, gitignored).
+- **S2.1** [V1] The Surveyor shall build the ledger from spec files, `specs/approvals.jsonl`, `specs/events.jsonl`, git commit trailers and test annotations. A test annotation is the text `sparkwright: <ID>` anywhere in a file matching `test_globs`. Trailers are `SparkWright-Task: <ID>` (repeatable) and `SparkWright-Role: <role>`; trailer keys are case-sensitive, role values are compared in lower case, and a commit whose role trailers disagree fails `check`. Merge commits are skipped for trailer and drift checks but not for the log and review-file checks (S6.9, S6.11). The ledger is generated (`.sparkwright/ledger.json`, gitignored).
 - **S2.2** [V1] `trace <ID>` shall report the chain up to evidence or assumptions and down to tasks, tests and commits.
 - **S2.3** [V2, V1] The Surveyor shall report as gaps: a parent with no child once the child level has any requirement; a child citing an unknown ID or an ID of the wrong level; a task citing a component other than its own; a task with derived status `done` and no test; a commit after the baseline with no task trailer, unless every file it changes is drift-exempt (S2.6), such as spec-only commits.
-- **S2.4** [V8] When a requirement, evidence file, change request or test file is approved, the system shall append an entry to `specs/approvals.jsonl` with `id`, `hash`, `approver`, `role`, `change_request` and `time`, plus `risk` (the owning file's risk tier) and `hash2` for requirements. Ids and hashes: a requirement uses its ID, `hash` covers its text and extras, and `hash2` also covers the sorted parent links and a task file's `## Acceptance criteria` section; an evidence file or change request uses its file id and a hash of the file body; a test file uses `test:<repo-relative path>` and a hash of the file. `role` is `human` for approvals and `runner` only for test locks. When an approved item's current hash (or `hash2`, when recorded) differs from its latest approval, `check` shall fail. An approval without `hash2` still counts; `approve` refreshes it without a change request when the text is unchanged. A changed requirement is re-approved only with an approved change request (`approve --cr CR<n>`).
+- **S2.4** [V8] When a requirement, evidence file, change request or test file is approved, the system shall append an entry to `specs/approvals.jsonl` with `id`, `hash`, `approver`, `role`, `change_request` and `time`, plus `risk` (the owning file's risk tier) and `hash2` for requirements. Ids and hashes: a requirement uses its ID, `hash` covers its text and extras, and `hash2` also covers the sorted parent links and a task file's `## Acceptance criteria` section; an evidence file or change request uses its file id, `hash` of the file body and `hash2` of the body plus the front-matter fields `simulated`, `consent`, `source`, `target`, `renames` and `risk`; a change request counts as approved only while such an approval matches it, whatever its `status` line says; a test file uses `test:<repo-relative path>` and a hash of the file. `role` is `human` for approvals and `runner` only for test locks. When an approved item's current hash (or `hash2`, when recorded) differs from its latest approval, `check` shall fail. An approval without `hash2` still counts; `approve` refreshes it without a change request when the text is unchanged. A changed requirement is re-approved only with an approved change request (`approve --cr CR<n>`).
 - **S2.5** [V4] When a change request is applied (`change apply`, S3.11), the Surveyor shall compute its affected set (each target and every descendant), and the engine shall append a `changed` event for each affected requirement whose derived status is `approved`, `building` or `done`, and a `cr-applied` event for each target; affected items in `draft` or `in-review` are not changed. Approving a change request appends no event.
 - **S2.6** [V4] When a commit after the baseline changes a file that matches no `files` glob of any task with derived status `approved`, `building` or `done`, and the file is not exempt, `check` shall report drift. Exempt: the paths in `drift_exclude` (default `specs/**`, `.sparkwright/**`, `*.md`, `LICENSE`, `NOTICE`, `.gitignore`, `.gitattributes`, `personas/**`, `templates/**`), and files matching `test_globs` in a commit whose trailer cites a task that is `approved`, `building`, `done`, `changed` or `in-review`. Globs use shell matching where `*` matches across `/` and `dir/**` matches everything under `dir`. Drift is checked only once at least one task declares `files`.
 - **S2.7** [V10] The baseline is the config key `baseline` (a commit hash): commit, drift and log checks apply only to commits after it, and when it is unset they apply to the whole history. `init` in a repository that has commits records the current commit; `adopt` records the current commit and the Surveyor drafts Task, Component and System specs bottom-up, all in status `draft`.
@@ -130,7 +131,7 @@ Example with two refs and a continuation line:
 - **S3.8** [V3] Tasks whose `files` globs do not intersect shall build in parallel in separate workspaces; before merge, the engine shall compare the actual changed files and stop if two builds changed the same file.
 - **S3.9** [V4] When an approved change request is applied and its target is re-reviewed and re-approved, the engine shall make its `changed` descendant tasks buildable again; their next build counts as a round under S3.6.
 - **S3.10** [V4] When a change request is applied, its targets become `in-review` (S2.8); a target's re-approval with `--cr` is refused until a review recorded after the apply has seen its current text, and descendant tasks are re-approved and rebuilt only after their target is re-approved.
-- **S3.11** [V4, V10] A change request shall move through: `open` (written by `change new` or a `spec_defect`) → `approved` (by a human with `approve CR<n>`, or an Inspector pass where S6.4 allows) → `applied` (by `change apply CR<n>`, which appends the S2.5 events and sets the file status; it does not edit spec text) → done when every target is re-approved with `--cr`. A human edits the targets to match the change request's ADDED, MODIFIED and REMOVED lines after applying it. A change request may also become `rejected`, or `blocked` under S3.6. `target` may be one ID or a list.
+- **S3.11** [V4, V10] A change request shall move through: `open` (written by `change new` or a `spec_defect`) → `approved` (by a human with `approve CR<n>`) → `applied` (by `change apply CR<n>`, which appends the S2.5 events and sets the file status; it does not edit spec text) → done when every target is re-approved with `--cr`. A human edits the targets to match the change request's ADDED, MODIFIED and REMOVED lines after applying it. A change request may also become `rejected`, or `blocked` under S3.6. `target` may be one ID or a list.
 
 ### S4 — Roles & Model Router
 
@@ -139,7 +140,7 @@ Example with two refs and a continuation line:
 - **S4.3** [V7] Model choice shall use provider-neutral tiers `top`, `mid`, `fast`; `models` maps each tier to a provider and model, `roles` maps a role to a tier (default: the persona's `tier`).
 - **S4.4** [V9] When a role call fails (provider error or timeout), the router shall make one more attempt at the next tier up, or the same tier for `top`; when both fail, the role has failed and the engine applies "Build failure handling".
 - **S4.5** [V9] Before each persona call, the router shall estimate its cost as the mean cost of earlier calls in the run (0 for the first call); when `budgets.per_run_usd` or `budgets.per_level_usd.<level>` (US dollars, 0 = no ceiling) would be exceeded, it shall skip the remaining personas in list order, except that the first 2 Inspectors and any persona required by S6.2 or S6.7 always run. A required persona that fails or is skipped adds a high-severity finding, so the review fails closed. Cost comes from `price_per_mtok` per tier in config. Because the dollar ceiling cannot work for a tier without a positive price, calls to unpriced tiers stop with a budget error once the run has made `budgets.max_calls_per_run` calls (default 40); the forced minimum Inspectors are exempt.
-- **S4.6** [V11] When a persona receives artifact, parent, evidence or source text, the text shall be framed as data between fixed markers with an instruction never to follow directions inside it, and the persona's output shall be used only as parsed findings or result JSON.
+- **S4.6** [V11] When a persona receives artifact, parent, evidence or source text, the text shall be framed as data, ending at a marker that contains a hash of the data (so the data cannot contain it), with an instruction never to follow directions inside it, and the persona's output shall be used only as parsed findings or result JSON.
 
 ### S5 — Verification Toolkit
 
@@ -152,7 +153,7 @@ Example with two refs and a continuation line:
 
 ### S6 — Policy & Gates
 
-- **S6.1** [V5] An Inspector pass means at least 2 personas produced parseable output and no open high-severity finding remains. Every approval of a spec is recorded by a human with `approve` (role `human`, S6.3); the Runner records only test locks (role `runner`). Gates: Evidence — human; Vision — Inspector pass and human; System — Inspector pass and human; Component and Task — Inspector pass, then approval (`gates.component` / `gates.task` may be `auto`, where a passing review reports PASS, or `human`, where it reports HUMAN like System); test lock — red check and Saboteur passed; code — `verify` green, Code Reviewer pass, human merge.
+- **S6.1** [V5] An Inspector pass means at least 2 personas produced parseable output and no open high-severity finding remains. Every approval of a spec is recorded by a human with `approve` (role `human`, S6.3); the Runner records only test locks (role `runner`). Gates: Evidence — human; Vision — Inspector pass and human; System — Inspector pass and human; Component and Task — Inspector pass, then a human approval (`gates.component` / `gates.task` only choose whether a passing review reports PASS (`auto`) or HUMAN (`human`); nothing is approved automatically); test lock — red check and Saboteur passed; code — `verify` green, Code Reviewer pass, human merge.
 - **S6.2** [V5] When an artifact has `risk: high`, its spec review shall add the Security Reviewer and require a human, overriding `gates` config; its build shall add a Security Reviewer step when the source diff (excluding tests and specs) has at least `security_review.min_changed_lines` changed lines (default 20). Changing an artifact's `risk` shall require a human gate.
 - **S6.3** [V8] Human approvals shall be recorded by `sparkwright approve <ID> --as <name>`. `check` shall accept a committed approval line with role `human` only when the commit that added it was authored by an email listed under `approvers` for that name. `require_signed` is `false`, `high-risk` (default) or `true`: with `high-risk`, approvals of items whose recorded or current risk is `high` must be in commits with a good signature; with `true`, all human approvals. When an approver lists `signing_key`, the signature must be made with that key. A `signing_from` that is not a commit is an error. Signing is enforced for commits after `signing_from`; until `signing_from` is set, unsigned approvals that would need a signature are reported as a warning with setup instructions. Uncommitted approval lines are reported as `approval.pending`.
 - **S6.4** [V5] Change requests targeting Vision, System or `risk: high` artifacts shall require human approval; others an Inspector pass.
@@ -327,8 +328,9 @@ where `Usage` has `input_tokens` and `output_tokens`.
 | `protected.<role>` | list of globs, additive | builder, test-author, property-tester defaults | S6.5 |
 
 The red check runs the whole `checks.test` command in the workspace after the
-Test Author's commit; it must exit non-zero, and a collection or discovery error
-does not count as red.
+Test Author's commit (S5.2). It must exit non-zero; an import error of the code
+under test counts as red, while a broken test runner (no tests collected, the
+runner itself missing) does not.
 
 ## Coverage map
 
