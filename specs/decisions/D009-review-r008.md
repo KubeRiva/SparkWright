@@ -2,7 +2,7 @@
 id: D009
 title: Fixes for the R008 system review and a strict guard mode
 type: decision
-status: in-review
+status: approved
 ---
 
 ## Question
