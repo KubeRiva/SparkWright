@@ -3,7 +3,7 @@ id: SYSTEM
 title: SparkWright system specification
 type: system
 version: 0.3
-status: in-review
+status: approved
 risk: high
 reviews: [R001, R002, R003]
 decisions: [D001, D002, D003, D004, D005, D006, D007]
