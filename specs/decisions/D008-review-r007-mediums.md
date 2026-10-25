@@ -2,7 +2,7 @@
 id: D008
 title: Fixes for the medium findings of the R007 system review
 type: decision
-status: in-review
+status: approved
 ---
 
 ## Question

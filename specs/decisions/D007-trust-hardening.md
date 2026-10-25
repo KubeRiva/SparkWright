@@ -2,7 +2,7 @@
 id: D007
 title: Trust hardening after the R007 system review
 type: decision
-status: in-review
+status: approved
 ---
 
 ## Question

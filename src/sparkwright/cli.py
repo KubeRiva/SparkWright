@@ -175,7 +175,7 @@ def cmd_approve(args) -> int:
             return _emit(args, "approve", False, {"error": "file has parse errors"},
                          f"Refusing: {sf.path} has parse errors; run `sparkwright check`.")
         reqs = sf.requirements
-        if sf.meta.get("type") in ("evidence", "change"):
+        if sf.meta.get("type") in ("evidence", "change", "decision"):
             body_hash = checks.evidence_hash(root / sf.path)
             entries.append(Approval(sf.id, body_hash, args.approver, args.role, args.cr, when,
                                     hash2=checks.evidence_hash2(root / sf.path)))
@@ -209,7 +209,7 @@ def cmd_approve(args) -> int:
     def last_applied(rid: str) -> str | None:
         return max((e.time for e in evs if e.id == rid and e.event == "cr-applied"), default=None)
 
-    blocked, unreviewed, refused = [], [], []
+    blocked, unreviewed, refused, not_covered = [], [], [], []
     for r in reqs:
         prev = latest.get(r.id)
         risk = approvals.risk_of(repo, r.id)
@@ -226,7 +226,8 @@ def cmd_approve(args) -> int:
         if args.cr and prev:  # S3.10: a change request re-approves its target only after a review, then its descendants
             above = [t for t in cr_targets if t in ancestors(r.id)]
             if r.id not in cr_targets and not above:
-                refused.append(f"{r.id} is not {', '.join(cr_targets)} or below it, so {args.cr} does not cover it")
+                msg = f"{r.id} is not {', '.join(cr_targets)} or below it, so {args.cr} does not cover it"
+                (not_covered if sf is not None else refused).append(msg)  # a whole file may mix change requests
                 continue
             if r.id in cr_targets and not any(e.id == r.id and e.event == "cr-applied" and e.reason == args.cr for e in evs):
                 refused.append(f"apply {args.cr} first (`sparkwright change apply {args.cr}`)")
@@ -256,12 +257,17 @@ def cmd_approve(args) -> int:
         return _emit(args, "approve", False, {"needs_change_request": blocked},
                      "Refusing: these approved requirements changed and need a change request (--cr CR<n>): "
                      + ", ".join(blocked))
+    if not_covered and not entries:
+        return _emit(args, "approve", False, {"refused": not_covered}, "Refusing: " + "; ".join(not_covered))
     approvals.append(root, entries)
-    if sf is not None:
+    if sf is not None and not not_covered:
         _set_status(root / sf.path, "approved")
     ids_done = [e.id for e in entries]
     msg = f"Recorded {len(entries)} approval(s) by {args.approver}" + (f" for {sf.path}" if sf else "") + "."
-    return _emit(args, "approve", True, {"approved": ids_done}, msg)
+    if not_covered:
+        msg += (f" Left for another change request: {len(not_covered)} requirement(s) outside {args.cr}; "
+                f"the file stays in review until they are approved too.")
+    return _emit(args, "approve", True, {"approved": ids_done, "not_covered": not_covered}, msg)
 
 
 # ---------------------------------------------------------------- init

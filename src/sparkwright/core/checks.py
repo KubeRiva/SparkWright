@@ -134,6 +134,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
         if sf.id and ids.kind_of(sf.id) == "change" and sf.status in ("approved", "applied") and sf.id not in valid_crs:
             add("error", "approval.unconfirmed", f"change request {sf.id} is marked {sf.status} but has no matching "
                 f"human approval; it is ignored until a human approves it", id=sf.id, file=sf.path)
+    for sf in repo.files:  # D008: a decision record counts as approved only with a matching human approval
+        if sf.id and sf.meta.get("type") == "decision" and sf.status == "approved" \
+                and not file_approval_holds(root, sf.path, latest.get(sf.id)):
+            add("warning", "approval.unconfirmed-decision", f"decision {sf.id} is marked approved but has no matching human "
+                f"approval (`sparkwright approve {sf.id} --as <name>`)", id=sf.id, file=sf.path)
     renames = rename_map(repo, valid_crs)
     rn = lambda i: renames.get(i, i)  # noqa: E731
     latest = {rn(k): v for k, v in latest.items()}

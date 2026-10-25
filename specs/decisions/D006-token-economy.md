@@ -2,7 +2,7 @@
 id: D006
 title: Token economy for host-agent runs
 type: decision
-status: in-review
+status: approved
 ---
 
 ## Question

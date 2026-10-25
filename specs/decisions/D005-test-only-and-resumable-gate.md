@@ -2,7 +2,7 @@
 id: D005
 title: Test-only tasks guard existing behaviour; the final gate resumes after interruption
 type: decision
-status: in-review
+status: approved
 ---
 
 ## Question
