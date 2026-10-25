@@ -2,7 +2,7 @@
 id: CR1
 title: Change S6.2
 type: change
-status: open
+status: approved
 target: S6.2
 raised_by: human
 rounds: 0
