@@ -14,4 +14,6 @@ risk: high
 
 ### S1 — <Component name>
 
-- **S1.1** [V1] <When ..., the system shall ...>
+<!-- Example (ignored by `sparkwright check` until you write real lines):
+- **S1.1** [V1] When ..., the system shall ...
+-->

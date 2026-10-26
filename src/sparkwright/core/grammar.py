@@ -94,6 +94,12 @@ def parse_body(body: str, file: str, first_line: int = 1) -> tuple[list[Requirem
         if in_fence:
             i += 1
             continue
+        if line.lstrip().startswith("<!--"):  # an HTML comment holds notes and examples, never requirements
+            while i < len(lines) and "-->" not in lines[i]:
+                i += 1
+            current = None
+            i += 1
+            continue
         m = LINE_RE.match(line)
         if m:
             rid = ids.canonical(m.group("id"))

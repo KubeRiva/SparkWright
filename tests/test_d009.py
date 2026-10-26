@@ -181,3 +181,20 @@ class TestR009(unittest.TestCase):
             run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
             line = json.loads((r / "specs/approvals.jsonl").read_text().splitlines()[-1])
             self.assertEqual(line.get("v"), 2)
+
+
+class TestFreshInit(unittest.TestCase):
+    def test_check_passes_right_after_init(self):
+        with TempRepo() as r:
+            git_init(r)
+            write(r, "README.md", "x\n")
+            commit(r, "start")
+            self.assertEqual(run_cli(r, "init")[0], 0)
+            commit(r, "init")
+            res = checks.run(r)
+            self.assertTrue(res.ok, [(f.code, f.message) for f in res.findings if f.severity == "error"])
+
+    def test_requirement_lines_in_html_comments_are_ignored(self):
+        from sparkwright.core.grammar import parse_body
+        reqs, issues = parse_body("<!-- example:\n- **V1** [E1] x\n-->\n- **V2** [A1] real\n", "v.md")
+        self.assertEqual([r.id for r in reqs], ["V2"])
