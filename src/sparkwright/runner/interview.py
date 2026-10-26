@@ -176,7 +176,7 @@ def owner_interview(root: Path | str, router: Router, ask: Callable[[str], str] 
     synthesis = synthesize(router, root, clean, log)
     path = write_evidence(root, "owner interview", "owner consented in terminal", synthesis, slug="owner-interview")
     sat, _ = saturation(root)
-    log.append("write", status="done", evidence=str(path.relative_to(root)))
+    log.append("write", status="done", evidence=path.relative_to(root).as_posix())
     say(f"Saved {path.relative_to(root)} ({len(synthesis['statements'])} statements, {len(synthesis['themes'])} themes).")
     return InterviewResult(path, asked, sat)
 
@@ -194,7 +194,7 @@ def ingest(root: Path | str, router: Router, transcript_path: Path | str, consen
     synthesis = synthesize(router, root, clean, log)
     path = write_evidence(root, "transcript", consent, synthesis, simulated=simulated, slug="transcript")
     sat, _ = saturation(root)
-    log.append("write", status="done", evidence=str(path.relative_to(root)))
+    log.append("write", status="done", evidence=path.relative_to(root).as_posix())
     return InterviewResult(path, len(synthesis["statements"]), sat)
 
 
@@ -215,8 +215,8 @@ def host_owner(root: Path | str, consent: str) -> dict:
         f"the transcript file below as alternating `Interviewer:` and `Owner:` lines.\n\nTranscript file: {run_dir / 'transcript.md'}\n",
         encoding="utf-8")
     log.append("consent", status="done", consent=consent)
-    return {"run_id": log.run_id, "prompt": str(prompt.relative_to(root)),
-            "transcript": str((run_dir / "transcript.md").relative_to(root)),
+    return {"run_id": log.run_id, "prompt": prompt.relative_to(root).as_posix(),
+            "transcript": (run_dir / "transcript.md").relative_to(root).as_posix(),
             "then": f"sparkwright interview ingest {(run_dir / 'transcript.md').relative_to(root).as_posix()} "
                     f"--consent \"{consent}\" --prepare"}
 
@@ -237,7 +237,7 @@ def prepare_ingest(root: Path | str, transcript_path: Path | str, consent: str, 
     prompt.write_text(persona.system_prompt() + "\n\n=== TRANSCRIPT (anonymized) ===\n" + redact(text, names), encoding="utf-8")
     log.append("consent", status="done", consent=consent, simulated=simulated)
     result = run_dir / "theme-synthesizer.result.json"
-    return {"run_id": log.run_id, "prompt": str(prompt.relative_to(root)), "result_file": str(result.relative_to(root)),
+    return {"run_id": log.run_id, "prompt": prompt.relative_to(root).as_posix(), "result_file": result.relative_to(root).as_posix(),
             "then": f"sparkwright interview collect {log.run_id}"}
 
 
@@ -257,5 +257,5 @@ def collect(root: Path | str, run_id: str) -> InterviewResult:
     path = write_evidence(root, "transcript", start["consent"], synthesis, simulated=bool(start.get("simulated")),
                           slug="interview")
     sat, _ = saturation(root)
-    log.append("write", status="done", evidence=str(path.relative_to(root)))
+    log.append("write", status="done", evidence=path.relative_to(root).as_posix())
     return InterviewResult(path, len(synthesis["statements"]), sat)
