@@ -31,8 +31,7 @@ AI agents build fast and drift fast. SparkWright makes three promises:
 ## Install
 
 ```sh
-git clone https://github.com/kuberiva/sparkwright
-cd sparkwright && pip install -e .   # PyPI release coming
+uv tool install git+https://github.com/KubeRiva/SparkWright.git   # or: pip install git+https://...
 sparkwright init          # creates specs/, templates and .sparkwright/config.yaml
 ```
 
@@ -103,7 +102,7 @@ such as Ollama or vLLM). API keys are read from environment variables only.
 
 ## Coding agents: any host
 
-- **Claude Code:** `claude plugin marketplace add kuberiva/sparkwright` then
+- **Claude Code:** `claude plugin marketplace add KubeRiva/SparkWright` then
   `claude plugin install sparkwright@sparkwright`. Interviews, reviews, descend
   and builds run on Claude Code's own subagents, so no separate API key is
   needed. A PreToolUse hook (`sparkwright guard`) stops agents from editing

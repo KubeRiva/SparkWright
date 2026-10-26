@@ -4,17 +4,18 @@ This runs SparkWright on your Claude Code subscription: Claude Code's own
 agents do the interviewing, reviewing, testing and building, and the
 `sparkwright` CLI enforces the rules. No API key is needed.
 
-Commands are for PowerShell. Paths assume SparkWright lives in `D:\SparkWright`.
+Commands are for PowerShell; they work the same in bash or zsh on macOS and Linux.
 
 ## 1. Install the CLI (once)
 
 ```powershell
-uv tool install --editable D:\SparkWright
+uv tool install git+https://github.com/KubeRiva/SparkWright.git
 uv tool update-shell          # puts sparkwright on PATH; open a new terminal afterwards
 sparkwright --version
 ```
 
-Without uv: `py -m pip install -e D:\SparkWright`.
+Without uv: `pip install git+https://github.com/KubeRiva/SparkWright.git`.
+To work on SparkWright itself, clone it and use `uv tool install --editable <clone>`.
 
 The Claude Code plugin calls `sparkwright guard` before every file edit and
 shell command, so the CLI must be on PATH for Claude Code too.
@@ -22,7 +23,7 @@ shell command, so the CLI must be on PATH for Claude Code too.
 ## 2. Install the Claude Code plugin (once)
 
 ```powershell
-claude plugin marketplace add D:\SparkWright
+claude plugin marketplace add KubeRiva/SparkWright
 claude plugin install sparkwright@sparkwright
 ```
 
@@ -31,44 +32,31 @@ This adds eight skills (`sparkwright-interview`, `sparkwright-review`,
 `sparkwright-calibrate`, `sparkwright-check`, `sparkwright-mutate`), the
 fresh-context agents they use, and the guard hook.
 
-If you installed the plugin before, update it after pulling SparkWright
-changes: `claude plugin marketplace update sparkwright` then
+To update later, run `uv tool upgrade sparkwright`, then `claude plugin marketplace update sparkwright` then
 `claude plugin update sparkwright@sparkwright`, and restart Claude Code. If
 an update is not picked up, uninstall and install it again.
 
-## 3. Continue the ChessTutor hint-ladder slice (lab copy)
-
-The lab copy is at `D:\SparkWright\lab\chesstutor` on branch `sparkwright/dogfood`.
-Task `C1.1.1.T1` is already built and merged there.
+## 3. Start a project
 
 ```powershell
-cd D:\SparkWright\lab\chesstutor
-$env:UV_PROJECT_ENVIRONMENT = "$PWD\.venv-sparkwright"
-uv sync --all-groups          # once: the shared build environment from .sparkwright/config.yaml
-sparkwright check
-sparkwright status
+mkdir my-app; cd my-app
+git init
+git commit --allow-empty -m "start"
+sparkwright init
+```
+
+Open `.sparkwright\config.yaml` and check that `approvers` lists your name and
+git email, set `checks: {test: "python -m pytest -q"}` (or your own test
+command), and add `guard: {strict: true}` if Claude should only change code
+inside task builds. Commit, then start Claude Code in the folder:
+
+```powershell
+git add -A; git commit -m "SparkWright init"
 claude
 ```
 
-In Claude Code, ask for one task at a time:
-
-> Build task C1.1.2.T1 with the sparkwright-build skill.
-
-Claude Code runs the loop: a fresh Test Author writes failing tests (plus a
-fresh Property Tester when the task declares `invariants`), a fresh Builder
-implements, SparkWright runs your checks, the library check and mutation
-testing, locks the tests, a fresh Code Reviewer reviews, and a final gate
-re-checks everything from git. C1 is `risk: high`, so a fresh Security
-Reviewer also reviews each diff after the Code Reviewer. When it reports **ready**:
-
-```powershell
-git diff sparkwright/dogfood...sparkwright/C1.1.2.T1     # review
-git merge --no-ff sparkwright/C1.1.2.T1
-sparkwright check
-```
-
-Remaining tasks, in a sensible order:
-`C1.1.2.T1`, `C1.1.3.T1`, `C1.2.1.T1`, `C1.2.2.T1`, `C1.3.1.T1`, `C1.3.2.T1`, `C1.4.1.T1`.
+For an existing codebase, run `sparkwright init` there and ask Claude to
+"adopt this codebase with the sparkwright-adopt skill".
 
 ## 4. The full flow on a new feature
 
