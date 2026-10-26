@@ -9,6 +9,7 @@ checks:
 trailers: warn        # the project predates its own trailer rules; becomes `required` after Phase 3
 approvers:
   - {name: Srikanth, email: kirankls@gmail.com}
+  - {name: Srikanth, email: srikanth.kiran2@gmail.com}
 require_signed: false
 baseline: 3d67fa0bee569b8c9e77a2bc565a80b7c65f78b5
 mutation: {min: 0.8, time_budget_s: 300}
