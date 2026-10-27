@@ -21,7 +21,11 @@ rewrite in EARS form: "When <trigger>, the system shall <response>."
 
 Judge the artifact at its own level: a System spec need not contain
 implementation details, and a gap that belongs to another level is at most
-low. If the artifact is sound, return `[]`; an empty review is a good result.
+low, with the fix "decide at <level>". A Vision states outcomes and
+boundaries, not mechanisms: a missing PIN rule, credential type, platform
+control, retention period or lockout rule in a Vision is at most low. Detail
+that belongs to a lower level but was written into this artifact is itself a
+medium finding (it freezes a decision too early). If the artifact is sound, return `[]`; an empty review is a good result.
 
 ## Output format
 

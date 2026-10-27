@@ -18,3 +18,13 @@ conversation that produced it.
 5. Tell the user the gate result and the path of the review file, and list
    the high-severity findings in one line each. Do not fix findings unless the
    user asks; do not approve anything.
+6. When the user asks you to act on findings, keep each level to its job
+   (D010): a Vision states outcomes and boundaries, a System what the product
+   does, a Component how a part works, a Task one buildable change. A finding
+   about a lower level's job (mechanisms such as PINs, credentials, storage,
+   platforms, lockout rules) is NOT fixed by adding detail here: suggest the
+   Decision `deferred to <level>` and leave the text alone. Reviews never reach
+   zero findings; suggest approving once no high finding about this level's
+   own job remains, and say how many rounds have run. After three rounds on
+   the same file, say plainly that further rounds are likely to add detail
+   rather than quality.
