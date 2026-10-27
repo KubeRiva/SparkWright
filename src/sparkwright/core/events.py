@@ -49,7 +49,7 @@ def read(root: Path | str) -> tuple[list[Event], list[str]]:
 def append(root: Path | str, entries: list[Event]) -> None:
     path = Path(root) / EVENTS_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
         for e in entries:
             fh.write(json.dumps({k: v for k, v in asdict(e).items() if v is not None}, sort_keys=True) + "\n")
 

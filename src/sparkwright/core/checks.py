@@ -177,6 +177,7 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
 
     # --- references (S1.2, S1.4) ---
     present_kinds = {r.kind for r in repo.requirements.values()}
+    unapproved_ev: dict[str, list[str]] = {}
     for rid, r in repo.requirements.items():
         loc = dict(id=rid, file=r.file, line=r.line)
         allowed = ids.PARENT_KINDS.get(r.kind)
@@ -199,6 +200,15 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
             backing = [x for x in r.refs if (x in repo.evidence and not repo.evidence[x].simulated) or ids.kind_of(x) == "assumption"]
             if not backing:
                 add("error", "vision.no-evidence", f"{rid} cites no real evidence or assumption", **loc)
+            unconfirmed = [x for x in r.refs if x in repo.evidence and not repo.evidence[x].simulated
+                           and x not in latest]
+            if unconfirmed and status_of_file(repo, rid) in APPROVED_LIKE:
+                for x in unconfirmed:
+                    unapproved_ev.setdefault(x, []).append(rid)
+
+    for x, users in sorted(unapproved_ev.items()):
+        add("warning", "vision.unapproved-evidence", f"approved vision lines {', '.join(users)} cite evidence {x}, "
+            f"which nobody has approved yet; run `sparkwright approve {x} --as <name>`", id=x)
 
     # --- coverage (S2.3) ---
     not_started: set[str] = set()
@@ -345,6 +355,11 @@ def run(root: Path | str, write_ledger: bool = True) -> Result:
     if write_ledger:
         ledger.write(root, nodes)
     return Result(findings, nodes, cfg, commits)
+
+
+def status_of_file(repo, rid: str) -> str:
+    sf = repo.file_of.get(rid)
+    return str(sf.status) if sf is not None else ""
 
 
 def cr_targets(meta: dict) -> list[str]:

@@ -27,7 +27,7 @@ class RunLog:
 
     def append(self, step: str, **data) -> None:
         rec = {"run": self.run_id, "workflow": self.workflow, "step": step, **data}
-        with self.path.open("a", encoding="utf-8") as fh:
+        with self.path.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(redact(json.dumps(rec, sort_keys=True)) + "\n")  # S11.3
 
     def records(self) -> list[dict]:

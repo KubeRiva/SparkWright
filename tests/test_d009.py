@@ -198,3 +198,28 @@ class TestFreshInit(unittest.TestCase):
         from sparkwright.core.grammar import parse_body
         reqs, issues = parse_body("<!-- example:\n- **V1** [E1] x\n-->\n- **V2** [A1] real\n", "v.md")
         self.assertEqual([r.id for r in reqs], ["V2"])
+
+
+class TestUnapprovedEvidence(unittest.TestCase):
+    def test_approved_vision_citing_unapproved_evidence_warns(self):
+        with TempRepo() as r:
+            basic_repo(r)
+            write(r, ".sparkwright/config.yaml", "approvers:\n  - {name: Srikanth, email: t@example.com}\ntrailers: off\n")
+            git_init(r)
+            commit(r, "start")
+            run_cli(r, "approve", "VISION", "--as", "Srikanth")
+            found = [f for f in checks.run(r).findings if f.code == "vision.unapproved-evidence"]
+            self.assertEqual(len(found), 1)
+            run_cli(r, "approve", "E1", "--as", "Srikanth")
+            self.assertFalse([f for f in checks.run(r).findings if f.code == "vision.unapproved-evidence"])
+
+
+class TestLogLineEndings(unittest.TestCase):
+    def test_logs_are_written_with_lf(self):
+        with TempRepo() as r:
+            basic_repo(r)
+            write(r, ".sparkwright/config.yaml", "approvers:\n  - {name: Srikanth, email: t@example.com}\n")
+            git_init(r)
+            commit(r, "start")
+            run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+            self.assertNotIn(b"\r\n", (r / "specs/approvals.jsonl").read_bytes())
