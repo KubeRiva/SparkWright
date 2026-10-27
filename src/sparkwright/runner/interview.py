@@ -100,7 +100,7 @@ def write_evidence(root: Path, source: str, consent: str, synthesis: dict, simul
     lines += ["", "## Themes", "", "| Theme | Name | Statements |", "| --- | --- | --- |"]
     for t in synthesis["themes"]:
         lines.append(f"| {_cell(t.get('id', '?'))} | {_cell(t.get('name', ''))} | {', '.join(map(str, t.get('statements', [])))} |")
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
@@ -213,7 +213,7 @@ def host_owner(root: Path | str, consent: str) -> dict:
         persona.system_prompt() + "\n\n## Host mode\n\nYou are talking to the owner directly in chat. Ask one question per "
         "message and wait for the answer. When you would reply DONE, stop asking and write the whole conversation to "
         f"the transcript file below as alternating `Interviewer:` and `Owner:` lines.\n\nTranscript file: {run_dir / 'transcript.md'}\n",
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
     log.append("consent", status="done", consent=consent)
     return {"run_id": log.run_id, "prompt": prompt.relative_to(root).as_posix(),
             "transcript": (run_dir / "transcript.md").relative_to(root).as_posix(),
@@ -234,7 +234,7 @@ def prepare_ingest(root: Path | str, transcript_path: Path | str, consent: str, 
     run_dir.mkdir(parents=True, exist_ok=True)
     persona = load_all(root)["theme-synthesizer"]
     prompt = run_dir / "theme-synthesizer.md"
-    prompt.write_text(persona.system_prompt() + "\n\n=== TRANSCRIPT (anonymized) ===\n" + redact(text, names), encoding="utf-8")
+    prompt.write_text(persona.system_prompt() + "\n\n=== TRANSCRIPT (anonymized) ===\n" + redact(text, names), encoding="utf-8", newline="\n")
     log.append("consent", status="done", consent=consent, simulated=simulated)
     result = run_dir / "theme-synthesizer.result.json"
     return {"run_id": log.run_id, "prompt": prompt.relative_to(root).as_posix(), "result_file": result.relative_to(root).as_posix(),

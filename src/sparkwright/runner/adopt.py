@@ -116,7 +116,7 @@ def prepare(root: Path | str, paths: list[str] | None = None) -> dict:
     run_dir = log.path.with_suffix("")
     run_dir.mkdir(parents=True, exist_ok=True)
     prompt = run_dir / "surveyor.md"
-    prompt.write_text(load_all(root)["surveyor"].system_prompt() + "\n=== CODE INVENTORY ===\n" + inv, encoding="utf-8")
+    prompt.write_text(load_all(root)["surveyor"].system_prompt() + "\n=== CODE INVENTORY ===\n" + inv, encoding="utf-8", newline="\n")
     head = _git(root, "rev-parse", "HEAD").strip()
     log.append("start", status="started", head=head, paths=paths or [])
     return {"run_id": log.run_id, "prompt": str(prompt.relative_to(root)),
@@ -157,12 +157,12 @@ def _set_baseline(root: Path, head: str) -> bool:
     text = cfg.read_text(encoding="utf-8") if cfg.is_file() else ""
     if re.search(r"^baseline:\s*(null|~)?\s*(#.*)?$", text, re.M):
         cfg.write_text(re.sub(r"^baseline:\s*(null|~)?\s*(#.*)?$", lambda _m: f"baseline: {head}  # recorded by adopt",
-                              text, count=1, flags=re.M), encoding="utf-8")
+                              text, count=1, flags=re.M), encoding="utf-8", newline="\n")
         return True
     if not re.search(r"^baseline:", text, re.M):
         cfg.parent.mkdir(parents=True, exist_ok=True)
         cfg.write_text(text + ("" if text.endswith("\n") or not text else "\n") + f"baseline: {head}  # recorded by adopt\n",
-                       encoding="utf-8")
+                       encoding="utf-8", newline="\n")
         return True
     return False
 
@@ -249,13 +249,13 @@ def collect(root: Path | str, run_id: str, reply: str | None = None) -> dict:
             + "## Requirements\n\n"
             f"- **V1** [A1] {purpose}\n\n## Assumptions (not yet backed by user evidence)\n\n"
             "- **A1** [] The purpose above was inferred from the code by `sparkwright adopt`. "
-            "*Validate with an owner interview (`sparkwright interview owner`).*\n", encoding="utf-8")
+            "*Validate with an owner interview (`sparkwright interview owner`).*\n", encoding="utf-8", newline="\n")
         written.append("specs/vision.md")
     (specs / "system.md").write_text(
         _front({"id": "SYSTEM", "title": "System (drafted by adopt from existing code)", "type": "system",
                 "status": "draft", "risk": "high"})
         + "## Overview\n\nDrafted bottom-up from the existing code. Correct it before approving.\n\n## Requirements\n"
-        + "\n".join(sys_lines) + "\n", encoding="utf-8")
+        + "\n".join(sys_lines) + "\n", encoding="utf-8", newline="\n")
     written.append("specs/system.md")
     (specs / "components").mkdir(parents=True, exist_ok=True)
     for n, comp, reqs, tasks in comps:

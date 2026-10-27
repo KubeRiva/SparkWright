@@ -270,7 +270,7 @@ def write_review(root: Path, res: ReviewResult) -> Path:
         lines += ["", f"Skipped (cost ceiling): {', '.join(res.skipped)}"]
     if res.abstained:
         lines += ["", f"Abstained (unparseable output): {', '.join(res.abstained)}"]
-    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
@@ -405,7 +405,7 @@ def prepare(root: Path | str, target: str, persona_names: list[str] | None = Non
     run_dir = log.path.with_suffix("")
     run_dir.mkdir(parents=True, exist_ok=True)
     ctx = run_dir / "context.md"
-    ctx.write_text(context, encoding="utf-8")
+    ctx.write_text(context, encoding="utf-8", newline="\n")
     log.append("start", status="started", mode="host-agents", target=sf.id or target, level=level,
                personas=names, files=included, injection_hits=hits, injection_mentions=mentions, risk=sf.meta.get("risk"))
     return Prepared(log.run_id, run_dir, ctx, sf.id or target, level, names)

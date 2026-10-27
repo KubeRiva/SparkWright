@@ -157,7 +157,7 @@ def write_report(root: Path, tier_stats: dict[str, dict[str, dict]], cfg: dict, 
         text += "No change proposed.\n"
     path = root / REPORT
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path, propose
 
 
@@ -196,14 +196,14 @@ def prepare(root: Path | str, personas: list[str] | None = None, batch: bool = F
     (run_dir / "cases").mkdir(parents=True, exist_ok=True)
     by_id = {c.id: c for c in cases}
     for c in {cid for cid, _ in pairs}:
-        (run_dir / "cases" / f"{c}.md").write_text(by_id[c].context, encoding="utf-8")
+        (run_dir / "cases" / f"{c}.md").write_text(by_id[c].context, encoding="utf-8", newline="\n")
     if batch:  # one agent per persona: about 85% fewer agent start-ups, at some cost in independence
         jobs = []
         for p in personas:
             mine = [cid for cid, q in pairs if q == p]
             ctx = run_dir / f"batch__{p}.md"
             ctx.write_text(BATCH_NOTE + "\n\n" + "\n\n".join(f"=== CASE {c} ===\n{by_id[c].context}" for c in mine),
-                           encoding="utf-8")
+                           encoding="utf-8", newline="\n")
             jobs.append({"case": "batch", "persona": p, "cases": mine, "context": str(ctx.relative_to(root)),
                          "result_file": str((run_dir / f"batch__{p}.json").relative_to(root))})
     else:

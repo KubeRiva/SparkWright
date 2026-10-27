@@ -46,5 +46,5 @@ def write(root: Path | str) -> Path:
         text = before + new + after
     else:
         text = (text.rstrip() + "\n\n" if text.strip() else "") + new
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", newline="\n")
     return path

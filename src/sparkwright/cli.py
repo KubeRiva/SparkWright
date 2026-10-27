@@ -323,15 +323,15 @@ def cmd_init(args) -> int:
         head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], capture_output=True, text=True)
         cfg = root / ".sparkwright" / "config.yaml"
         if head.returncode == 0 and "baseline: null" in cfg.read_text(encoding="utf-8"):
-            cfg.write_text(cfg.read_text(encoding="utf-8").replace("baseline: null", f"baseline: {head.stdout.strip()}"), encoding="utf-8")
+            cfg.write_text(cfg.read_text(encoding="utf-8").replace("baseline: null", f"baseline: {head.stdout.strip()}"), encoding="utf-8", newline="\n")
         signing = subprocess.run(["git", "-C", str(root), "config", "--get", "commit.gpgsign"], capture_output=True, text=True)
         text = cfg.read_text(encoding="utf-8")
         if head.returncode == 0 and signing.stdout.strip().lower() == "true" and "signing_from: null" in text:
-            cfg.write_text(text.replace("signing_from: null", f"signing_from: {head.stdout.strip()}"), encoding="utf-8")
+            cfg.write_text(text.replace("signing_from: null", f"signing_from: {head.stdout.strip()}"), encoding="utf-8", newline="\n")
         name, email = gitlog.user_identity(root)
         text = cfg.read_text(encoding="utf-8")
         if email and "approvers: []" in text:
-            cfg.write_text(text.replace("approvers: []", f"approvers:\n  - {{name: \"{name or email}\", email: \"{email}\"}}"), encoding="utf-8")
+            cfg.write_text(text.replace("approvers: []", f"approvers:\n  - {{name: \"{name or email}\", email: \"{email}\"}}"), encoding="utf-8", newline="\n")
     gi = root / ".gitignore"
     wanted = [".sparkwright/ledger.json", ".sparkwright/runs/", ".sparkwright/worktrees/"]
     existing = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
@@ -730,7 +730,7 @@ def cmd_change(args) -> int:
         title = f"Change {targets[0]}" if len(targets) == 1 else f"Change {len(targets)} requirements"
         path.write_text(f"---\nid: {cr}\ntitle: {title}\ntype: change\nstatus: open\ntarget: {tgt}\n"
                         f"raised_by: human\nrounds: 0\n---\n\n## Reason\n\n{args.reason or ''}\n\n## ADDED\n\n"
-                        f"## MODIFIED\n\n{lines}\n## REMOVED\n", encoding="utf-8")
+                        f"## MODIFIED\n\n{lines}\n## REMOVED\n", encoding="utf-8", newline="\n")
         return _emit(args, "change", True, {"change_request": str(path.relative_to(root))},
                      f"Opened {path.relative_to(root)}. Edit the MODIFIED lines, then a human approves it with `sparkwright approve {cr} --as <name>`.")
     # apply
@@ -756,6 +756,10 @@ def cmd_change(args) -> int:
     changed = [a for a in affected if res.nodes[a].status in ("approved", "building", "done")]
     events_mod.append(root, [events_mod.make(a, "changed", reason=f"{cr} applied") for a in changed])
     events_mod.append(root, [events_mod.make(t, "cr-applied", reason=cr) for t in targets])
+    for path in sorted({repo.file_of[t].path for t in targets if t in repo.file_of}):  # D009: the file is under change
+        sfile = next(f for f in repo.files if f.path == path)
+        if sfile.status == "approved":
+            _set_status(root / path, "in-review")
     target = ", ".join(targets)
     _set_status(root / sf.path, "applied")
     return _emit(args, "change", True, {"affected": sorted(affected, key=ids.sort_key), "marked_changed": changed},

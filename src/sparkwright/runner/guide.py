@@ -111,7 +111,7 @@ def prepare(root: Path | str, about: str, minors: bool | None = None) -> dict:
     run_dir = log.path.with_suffix("")
     run_dir.mkdir(parents=True, exist_ok=True)
     prompt = run_dir / f"{WRITER}.md"
-    prompt.write_text(load_all(root)[WRITER].system_prompt() + "\n" + _context(root, about, minors), encoding="utf-8")
+    prompt.write_text(load_all(root)[WRITER].system_prompt() + "\n" + _context(root, about, minors), encoding="utf-8", newline="\n")
     log.append("start", status="started", about=about[:500], minors=minors)
     return {"run_id": log.run_id, "step": WRITER, "prompt": str(prompt.relative_to(root)),
             "result_file": str((run_dir / f"{WRITER}.result.md").relative_to(root)),
@@ -130,14 +130,14 @@ def _write_guide(root: Path, log: RunLog, start: dict, draft: str) -> Path:
     meta = {"id": f"guide-{path.stem}", "title": f"Interview guide: {start['about'][:80]}", "type": "guide",
             "status": "draft", "minors": bool(start.get("minors"))}
     path.write_text("---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n\n" + draft.strip() + "\n",
-                    encoding="utf-8")
+                    encoding="utf-8", newline="\n")
     log.append("write", status="done", guide=str(path.relative_to(root).as_posix()), parents=draft_involves_parents)
     return path
 
 
 def _auditor_prompt(root: Path, run_dir: Path, guide: Path) -> Path:
     prompt = run_dir / f"{AUDITOR}.md"
-    prompt.write_text(load_all(root)[AUDITOR].system_prompt() + "\n=== INTERVIEW GUIDE ===\n" + _read(guide), encoding="utf-8")
+    prompt.write_text(load_all(root)[AUDITOR].system_prompt() + "\n=== INTERVIEW GUIDE ===\n" + _read(guide), encoding="utf-8", newline="\n")
     return prompt
 
 
@@ -154,7 +154,7 @@ def _finish(root: Path, log: RunLog, guide: Path, audit: list[Finding], minors: 
     gate = "FAIL — rewrite the flagged questions, then run the review again" if high else "PASS — ready to use"
     text += ("\n\n## Review\n\n" + f"Gate: {gate}\n\n| ID | Severity | Finding | Suggested fix | Raised by | Decision |\n"
              "| --- | --- | --- | --- | --- | --- |\n" + rows + "\n")
-    guide.write_text(text, encoding="utf-8")
+    guide.write_text(text, encoding="utf-8", newline="\n")
     log.append("review", status="done", findings=len(findings), high=len(high))
     return {"guide": str(guide.relative_to(root).as_posix()), "findings": len(findings), "high": len(high), "gate": gate}
 

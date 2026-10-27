@@ -76,7 +76,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
     def put(rel: str, text: str, mode: int | None = None) -> None:
         p = out / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        p.write_text(text, encoding="utf-8", newline="\n")
         if mode:
             p.chmod(mode)
         written.append(rel)
@@ -124,5 +124,5 @@ def write_marketplace(repo_root: Path | str, plugin_rel: str) -> Path:
         "owner": {"name": "KubeRiva"},
         "plugins": [{"name": PLUGIN, "source": f"./{plugin_rel}",
                      "description": "Evidence-backed, multi-level, verified spec-driven development."}],
-    }, indent=2) + "\n", encoding="utf-8")
+    }, indent=2) + "\n", encoding="utf-8", newline="\n")
     return p

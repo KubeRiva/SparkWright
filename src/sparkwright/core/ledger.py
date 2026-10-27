@@ -59,7 +59,7 @@ def to_json(nodes: dict[str, Node]) -> str:
 def write(root: Path | str, nodes: dict[str, Node]) -> Path:
     path = Path(root) / LEDGER_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(to_json(nodes), encoding="utf-8")
+    path.write_text(to_json(nodes), encoding="utf-8", newline="\n")
     return path
 
 

@@ -357,7 +357,7 @@ class Build:
         path.write_text(
             f"---\nid: {cr}\ntitle: Spec defect found while building {self.task}\ntype: change\nstatus: open\n"
             f"target: {target}\nraised_by: {role}\nrounds: 0\n---\n\n## Reason\n\n{reason}\n\n"
-            "## ADDED\n\n## MODIFIED\n\n## REMOVED\n", encoding="utf-8")
+            "## ADDED\n\n## MODIFIED\n\n## REMOVED\n", encoding="utf-8", newline="\n")
         self._event("changed", f"{cr}: {reason[:200]}")
         self.state.phase = "changed"
         self.state.result = {"change_request": f"specs/changes/{cr}.md", "target": target}
@@ -451,7 +451,7 @@ class Build:
                 refused.append(norm)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+            target.write_text(content, encoding="utf-8", newline="\n")
         return refused
 
     # ---- public API
@@ -463,7 +463,7 @@ class Build:
             run_dir.mkdir(parents=True, exist_ok=True)
             n = sum(st.rounds.values())
             prompt = run_dir / f"{st.phase}-{n}.md"
-            prompt.write_text(persona.system_prompt() + "\n\n" + self._context(st.phase), encoding="utf-8")
+            prompt.write_text(persona.system_prompt() + "\n\n" + self._context(st.phase), encoding="utf-8", newline="\n")
             result_file = run_dir / f"{st.phase}-{n}.result.json"
             return {"task": self.task, "step": st.phase, "kind": "agent", "persona": st.phase,
                     "prompt": prompt.relative_to(self.root).as_posix(), "workspace": st.workspace,
@@ -625,10 +625,10 @@ class Build:
         text = re.sub(r"^rounds:\s*\d+\s*$", f"rounds: {rounds}", text, count=1, flags=re.M)
         if rounds > MAX_ROUNDS:
             text = re.sub(r"^status:\s*\S+\s*$", "status: blocked", text, count=1, flags=re.M)
-            path.write_text(text, encoding="utf-8")
+            path.write_text(text, encoding="utf-8", newline="\n")
             self._block(f"{cr} has been rebuilt {MAX_ROUNDS} times; a human must apply or reject it")
             return
-        path.write_text(text, encoding="utf-8")
+        path.write_text(text, encoding="utf-8", newline="\n")
 
     def _step_red_check(self) -> None:
         st, ws = self.state, Path(self.state.workspace)
@@ -871,7 +871,7 @@ class Build:
         (ws / rel).write_text(
             f"---\nid: R{digits}{self.run_no}{n:02d}{'9' if kind == 'security' else ''}\ntitle: {kind.title()} review of {self.task}\ntype: review\nstatus: in-review\n---\n\n"
             "| ID | Severity | Requirements | Finding | Suggested fix | Decision |\n| --- | --- | --- | --- | --- | --- |\n"
-            f"{rows}\n", encoding="utf-8")
+            f"{rows}\n", encoding="utf-8", newline="\n")
         _commit(ws, self.task, "runner", REVIEW_STEPS[step], [rel])
 
     # ---- final gate

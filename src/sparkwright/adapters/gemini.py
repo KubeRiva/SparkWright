@@ -48,7 +48,7 @@ def generate(out_dir: Path | str, root: Path | str | None = None) -> list[str]:
     def put(rel: str, text: str) -> None:
         p = out / rel
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        p.write_text(text, encoding="utf-8", newline="\n")
         written.append(rel)
 
     personas = load_all(root)

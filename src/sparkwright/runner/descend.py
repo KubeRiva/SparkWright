@@ -133,7 +133,7 @@ def prepare(root: Path | str, parent: str) -> dict:
     run_dir.mkdir(parents=True, exist_ok=True)
     prompt = run_dir / "architect.md"
     prompt.write_text(load_all(root)["architect"].system_prompt() + "\n=== INSTRUCTIONS ===\n" + _instructions(plan)
-                      + "\n\n" + _context(root, repo, plan), encoding="utf-8")
+                      + "\n\n" + _context(root, repo, plan), encoding="utf-8", newline="\n")
     log.append("start", status="started", **plan)
     return {"run_id": log.run_id, "parent": plan["parent"], "child": plan["child"],
             "prompt": str(prompt.relative_to(root)), "result_file": str((run_dir / RESULT).relative_to(root)),
@@ -232,12 +232,12 @@ def _write_tasks(root: Path, repo: store.Repo, plan: dict, text: str) -> list[st
         original = _read(path)
         # The file now holds unapproved drafts: an approved file goes back to in-review until a human approves it.
         content = re.sub(r"^(---\n(?:.*\n)*?)status:\s*approved\s*$", r"\1status: in-review", content, count=1, flags=re.M)
-        path.write_text(content.rstrip("\n") + "\n", encoding="utf-8")
+        path.write_text(content.rstrip("\n") + "\n", encoding="utf-8", newline="\n")
         after_sf = next((sf for sf in store.load(root).files if sf.path == plan["owner"]), None)
         after = {r.id: r.hash for r in after_sf.requirements} if after_sf else {}
         if after_sf is None or after_sf.issues or any(after.get(k) != v for k, v in before.items()) \
                 or set(after) - set(before) != set(block_ids):
-            path.write_text(original, encoding="utf-8")
+            path.write_text(original, encoding="utf-8", newline="\n")
             raise DescendError("draft rejected: appending the tasks would change or break the component file")
         return [plan["owner"]]
     written = []

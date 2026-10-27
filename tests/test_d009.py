@@ -223,3 +223,20 @@ class TestLogLineEndings(unittest.TestCase):
             commit(r, "start")
             run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
             self.assertNotIn(b"\r\n", (r / "specs/approvals.jsonl").read_bytes())
+
+
+class TestApplyPutsFileInReview(unittest.TestCase):
+    def test_change_apply_sets_the_target_file_in_review(self):
+        from test_d008 import two_reqs
+        with TempRepo() as r:
+            two_reqs(r)
+            run_cli(r, "approve", "SYSTEM", "--as", "Srikanth")
+            commit(r, "approve")
+            run_cli(r, "change", "new", "S1.1", "--reason", "x")
+            run_cli(r, "approve", "CR1", "--as", "Srikanth")
+            commit(r, "cr")
+            run_cli(r, "change", "apply", "CR1")
+            self.assertIn("status: in-review", (r / "specs/system.md").read_text())
+            p = r / "specs/system.md"
+            p.write_text(p.read_text() + "- **S1.3** [V1] A new line.\n")
+            self.assertFalse([f for f in checks.run(r).findings if f.code == "approval.unconfirmed"])

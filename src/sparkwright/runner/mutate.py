@@ -204,10 +204,10 @@ def run(root: Path | str, base: str, test_cmd: str, time_budget_s: float = 300, 
                     break
                 report.total += 1
                 try:
-                    src_path.write_text(m.source, encoding="utf-8")
+                    src_path.write_text(m.source, encoding="utf-8", newline="\n")
                     survived = _run(test_cmd, work, per_test_timeout_s, env)
                 finally:
-                    src_path.write_text(original, encoding="utf-8")
+                    src_path.write_text(original, encoding="utf-8", newline="\n")
                 if survived:
                     report.survivors.append(m)
                 else:
